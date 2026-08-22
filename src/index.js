@@ -406,7 +406,7 @@ export function apply(ctx, config) {
   ctx.on('settings/updated', (ns) => {
     if (ns === PI_NS) scheduleFromSettings()
   })
-  ctx.on('credentials/updated', (ref) => {
+  ctx.on('credentials/reference-updated', (ref) => {
     if (ref === API_KEY_REF) schedule({ authOnly: true })
   })
   ctx.effect(() => () => {

@@ -358,7 +358,7 @@ window.__ModuleLoader__.load({
           if (active) setCredentialStatus(status)
         }
         void refresh()
-        const dispose = remote.$on('credentials/updated', (ref) => {
+        const dispose = remote.$on('credentials/reference-updated', (ref) => {
           if (ref === CREDENTIAL_REF) void refresh()
         })
         return () => {

@@ -235,7 +235,7 @@ test('first profile synchronization restores capabilities stripped by the browse
       reasoningEfforts: {
         low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
       },
-      compat: {},
+      compat: { chatTemplateKwargs: {} },
     })
     assert.deepEqual(profile.models[1].input, ['text'])
     await waitFor(() => harness.timeouts.some((row) => row.delay === 300000))
@@ -273,7 +273,7 @@ test('credential refresh cannot finalize a pending bootstrap profile early', asy
       }),
     } })
     harness.setCredential('secret-key')
-    harness.emit('credentials/updated', 'DSH_CLIPROXY_API_KEY')
+    harness.emit('credentials/reference-updated', 'DSH_CLIPROXY_API_KEY')
 
     await waitFor(() => harness.mutations.length === 1)
     await new Promise((resolve) => setTimeout(resolve, 25))
@@ -356,7 +356,7 @@ test('credential removal regenerates the profile in keyless mode', async () => {
 
     harness.mutations.length = 0
     harness.setCredential(undefined)
-    harness.emit('credentials/updated', 'DSH_CLIPROXY_API_KEY')
+    harness.emit('credentials/reference-updated', 'DSH_CLIPROXY_API_KEY')
     await waitFor(() => harness.mutations.length === 1)
     const profile = harness.mutations[0][0].value
     assert.equal(profile.apiKeyEnv, undefined)

@@ -102,7 +102,7 @@ test('client owns only its Settings slot and keeps the configuration accessible'
   assert.match(source, /expectedRevision/)
   assert.match(source, /scope\.subscribe\(/)
   assert.doesNotMatch(source, /remote\.\$on\('settings\/document-updated'/)
-  assert.match(source, /remote\.\$on\('credentials\/updated'/)
+  assert.match(source, /remote\.\$on\('credentials\/reference-updated'/)
   assert.match(source, /role: 'status'/)
 })
 
