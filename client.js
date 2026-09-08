@@ -32,6 +32,9 @@ window.__ModuleLoader__.load({
     const SETTINGS_SECTION_ORDER = 20
     const SETTINGS_LOCALE_NS = 'settings.cliProxyApi'
     const MODEL_SLOT = 'conversation.input.model'
+    // The runner gates activation on this declaration: apply only runs once
+    // every listed service exists, which is what makes the directory and
+    // session lookups below race-free (dynamic plugins have no ctx.inject).
     const inject = [
       'slots',
       'locale',
@@ -40,6 +43,8 @@ window.__ModuleLoader__.load({
       'remote.llm',
       'remote.settings',
       'settingsScope',
+      'modelDirectories',
+      'sessions',
     ]
 
     // Fast mode is a predefined property of the served family (gpt-* models);
@@ -1112,47 +1117,46 @@ window.__ModuleLoader__.load({
     }
 
     function installModelPicker(ctx, preference, t) {
-      // Wait for the directory service instead of probing once at apply time:
-      // client plugin order is not guaranteed, and a one-shot get() that fires
-      // before ui-model-selection registers its service would silently skip
-      // the shadowing and leave the built-in picker in place.
-      ctx.inject(['slots', 'modelDirectories'], (scope) => {
-        const modelDirectories = scope.modelDirectories
-        scope.slots.inject(MODEL_SLOT, () => scope.slots.register({
-          name: MODEL_SLOT,
-          // A later registration shadows the built-in picker on this seat.
-          priority: -10,
-          locale: SETTINGS_LOCALE_NS,
-          inject: (sessionId) => {
-            const directory = modelDirectories.directoryFor(sessionId)
-            const available = scope.get('sessions')?.subagentAddress(sessionId) === undefined
-            return {
-              available,
-              directory: directory.store,
-              load: () => {
-                if (available) void directory.load()
-              },
-              select: (selection) => available
-                ? directory.select(selection).then(() => true, () => false)
-                : Promise.resolve(false),
-              preference,
-            }
-          },
-        }, CliProxyModelSelect))
-        // The composer-side speed state chip, rendered only for Fast-capable
-        // CLIProxyAPI selections.
-        scope.slots.inject('conversation.input.right', () => scope.slots.register({
-          name: 'conversation.input.right',
-          id: 'cliproxyapi-speed',
-          order: 15,
-          locale: SETTINGS_LOCALE_NS,
-          inject: (sessionId) => ({
-            directory: modelDirectories.directoryFor(sessionId).store,
+      // Activation is gated on the inject declaration above, so both services
+      // are guaranteed present by the time apply runs.
+      const modelDirectories = ctx.get('modelDirectories')
+      const sessions = ctx.get('sessions')
+      if (modelDirectories === undefined) return
+      ctx.slots.inject(MODEL_SLOT, () => ctx.slots.register({
+        name: MODEL_SLOT,
+        // Dynamic registrations are auto-assigned a shadowing priority below
+        // any shipped entry, which is what wins this single seat.
+        priority: -10,
+        locale: SETTINGS_LOCALE_NS,
+        inject: (sessionId) => {
+          const directory = modelDirectories.directoryFor(sessionId)
+          const available = sessions?.subagentAddress(sessionId) === undefined
+          return {
+            available,
+            directory: directory.store,
+            load: () => {
+              if (available) void directory.load()
+            },
+            select: (selection) => available
+              ? directory.select(selection).then(() => true, () => false)
+              : Promise.resolve(false),
             preference,
-            t,
-          }),
-        }, SpeedIndicator))
-      })
+          }
+        },
+      }, CliProxyModelSelect))
+      // The composer-side speed state chip, rendered only for Fast-capable
+      // CLIProxyAPI selections.
+      ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+        name: 'conversation.input.right',
+        id: 'cliproxyapi-speed',
+        order: 15,
+        locale: SETTINGS_LOCALE_NS,
+        inject: (sessionId) => ({
+          directory: modelDirectories.directoryFor(sessionId).store,
+          preference,
+          t,
+        }),
+      }, SpeedIndicator))
     }
 
     function apply(ctx) {

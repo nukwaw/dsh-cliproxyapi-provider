@@ -32,6 +32,8 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
     'remote.llm',
     'remote.settings',
     'settingsScope',
+    'modelDirectories',
+    'sessions',
   ])
 
   const registrations = []
@@ -72,18 +74,15 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
     },
   }
   const effects = []
-  const deferred = []
   const ctx = {
     remote: { $on() { return () => {} } },
     slots,
     locale,
     settingsScope,
-    // The modelDirectories service never arrives in this mock: the picker
-    // install must stay deferred instead of registering anything.
-    inject(deps, callback) {
-      deferred.push(deps)
-      return () => {}
-    },
+    // ctx.inject is not exposed to dynamic client plugins; calling it must
+    // fail loudly so the install flow never regresses to it.
+    inject() { throw new Error('ctx.inject is not available to dynamic client plugins') },
+    // No directory services: the picker install must abstain.
     get() { return undefined },
     effect(factory) {
       effects.push(factory)
@@ -95,7 +94,6 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
   // invoked by this mock (no DOM in Node).
   assert.equal(effects.length, 2)
   assert.deepEqual(injections, ['settings.section'])
-  assert.deepEqual(deferred, [['slots', 'modelDirectories']])
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].options.name, 'settings.section')
   assert.equal(registrations[0].options.id, 'cliproxyapi')
@@ -131,7 +129,6 @@ test('client shadows the model picker when directory services are present', asyn
     load() { return Promise.resolve() },
     select() { return Promise.resolve() },
   }
-  const injectedDeps = []
   const ctx = {
     remote: { $on() { return () => {} } },
     slots,
@@ -140,26 +137,21 @@ test('client shadows the model picker when directory services are present', asyn
       bind() { return (key) => key },
     },
     settingsScope: { bind() { return scope } },
-    // The deferred install fires once the directory service is injected.
-    inject(deps, callback) {
-      injectedDeps.push(deps)
-      callback({
-        slots,
-        modelDirectories: { directoryFor: () => directory },
-        get(name) {
-          if (name === 'sessions') return { subagentAddress: () => undefined }
-          return undefined
-        },
-      })
-      return () => {}
+    inject() { throw new Error('ctx.inject is not available to dynamic client plugins') },
+    // In production the runner gates activation on the exported inject list,
+    // so both services exist before apply runs.
+    get(name) {
+      if (name === 'sessions') return { subagentAddress: () => undefined }
+      if (name === 'modelDirectories') return { directoryFor: () => directory }
+      return undefined
     },
-    get() { return undefined },
     effect() {
       return () => {}
     },
   }
   plugin.apply(ctx)
-  assert.deepEqual(injectedDeps, [['slots', 'modelDirectories']])
+  assert.ok(plugin.inject.includes('modelDirectories'))
+  assert.ok(plugin.inject.includes('sessions'))
   const picker = registrations.find((entry) => entry.options.name === 'conversation.input.model')
   assert.ok(picker)
   assert.equal(picker.options.priority, -10)
