@@ -75,12 +75,27 @@ export function modelProfileOf(entry, options = {}) {
   }
 }
 
+// CLIProxyAPI answers /models?client_version=pi with the Codex catalog
+// envelope ({ models: [...] }) when its Home integration is enabled, and with
+// the standard OpenAI list ({ data: [...] }) otherwise; some builds answer a
+// bare array. All three carry at least an id per entry, so the reader accepts
+// every envelope; modelProfileOf degrades non-codex entries to plain text
+// models without reasoning/fast/search capabilities.
+function catalogEntriesOf(body) {
+  if (Array.isArray(body)) return body
+  if (body && typeof body === 'object') {
+    if (Array.isArray(body.models)) return body.models
+    if (Array.isArray(body.data)) return body.data
+  }
+  throw new TypeError('CLIProxyAPI model catalog has no usable model list')
+}
+
 export function readCodexCatalog(body, options = {}) {
-  if (!body || !Array.isArray(body.models)) throw new TypeError('CLIProxyAPI model catalog has no "models" array')
+  const entries = catalogEntriesOf(body)
   const models = []
   const seen = new Set()
   const capabilities = new Map()
-  for (const entry of body.models) {
+  for (const entry of entries) {
     const model = modelProfileOf(entry, options)
     if (!model || seen.has(model.id)) continue
     seen.add(model.id)
@@ -94,6 +109,8 @@ export function readCodexCatalog(body, options = {}) {
 export function catalogURL(baseURL) {
   const base = String(baseURL ?? '').trim().replace(/\/+$/, '')
   if (!base) throw new TypeError('CLIProxyAPI baseURL must not be empty')
-  const query = new URLSearchParams({ client_version: 'dsh-cliproxyapi-provider' })
+  // Identify as the pi client, matching the reference integration — the data
+  // returned for that identity is the shape pi-ai model definitions map from.
+  const query = new URLSearchParams({ client_version: 'pi' })
   return base + '/models?' + query
 }

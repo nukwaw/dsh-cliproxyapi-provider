@@ -126,11 +126,29 @@ test('collects per-model capabilities alongside the profiles', () => {
 test('builds the Codex-compatible catalog URL', () => {
   assert.equal(
     catalogURL('http://127.0.0.1:8317/v1/'),
-    'http://127.0.0.1:8317/v1/models?client_version=dsh-cliproxyapi-provider',
+    'http://127.0.0.1:8317/v1/models?client_version=pi',
   )
 })
 
+test('reads the standard OpenAI list envelope as a fallback', () => {
+  const { models, capabilities } = readCodexCatalog({
+    data: [{ id: 'plain-model', object: 'model' }, { id: 'gpt-6-astra', object: 'model' }],
+  }, { defaultContextWindow: 262144, defaultMaxTokens: 32768 })
+  assert.deepEqual(models.map((model) => model.id), ['plain-model', 'gpt-6-astra'])
+  // Non-codex entries degrade to plain text models with no capabilities.
+  assert.equal(models[0].reasoningEfforts, undefined)
+  assert.equal(models[0].contextWindow, 262144)
+  assert.equal(models[0].maxTokens, 32768)
+  assert.deepEqual(capabilities.get('plain-model'), { fast: false, search: false })
+})
+
+test('reads a bare array envelope', () => {
+  const { models } = readCodexCatalog([{ id: 'plain-model' }])
+  assert.deepEqual(models.map((model) => model.id), ['plain-model'])
+})
+
 test('rejects malformed and empty catalogs', () => {
-  assert.throws(() => readCodexCatalog({ data: [] }), /no "models" array/)
+  assert.throws(() => readCodexCatalog({ other: [] }), /no usable model list/)
+  assert.throws(() => readCodexCatalog({ data: [] }), /no usable models/)
   assert.throws(() => readCodexCatalog({ models: [] }), /no usable models/)
 })
