@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
     const SPEED_MODE_STANDARD = 'standard'
     const SPEED_MODE_FAST = 'fast'
     const WEB_SEARCH_FIELD = 'webSearch'
+    const MODELS_FIELD = 'models'
     const CREDENTIAL_REF = 'DSH_CLIPROXY_API_KEY'
     const PROVIDER = 'CLIProxyAPI'
     const DEFAULT_BASE_URL = 'http://127.0.0.1:8317/v1'
@@ -90,6 +91,17 @@ window.__ModuleLoader__.load({
         providerDefault: 'Provider default',
         selectModel: 'Select model',
         speedTitle: 'Speed',
+        speedIndicator: 'Speed: {value} (click to toggle)',
+        modelsLabel: 'Models',
+        modelsAll: 'All catalog models',
+        modelsSelected: '{count} selected',
+        fetchModels: 'Fetch model list',
+        modelsModalTitle: 'Select models',
+        modelsModalHint: 'Only checked models appear in the model picker. Save the settings to apply.',
+        selectAll: 'Select all',
+        selectNone: 'Select none',
+        applySelection: 'Apply',
+        cancel: 'Cancel',
       },
       zh: {
         tab: 'CLIProxyAPI',
@@ -134,12 +146,39 @@ window.__ModuleLoader__.load({
         providerDefault: '供应商默认',
         selectModel: '选择模型',
         speedTitle: '速度',
+        speedIndicator: '速度：{value}（点击切换）',
+        modelsLabel: '模型',
+        modelsAll: '全部目录模型',
+        modelsSelected: '已选 {count} 个',
+        fetchModels: '获取模型列表',
+        modelsModalTitle: '选择模型',
+        modelsModalHint: '只有勾选的模型会出现在模型选择器中。保存设置后生效。',
+        selectAll: '全选',
+        selectNone: '全不选',
+        applySelection: '应用',
+        cancel: '取消',
       },
     }
 
     const STYLE = `
 .cpaModelSelect{position:relative;min-width:0}.cpaModelSelectTrigger{display:flex;align-items:center;gap:4px;min-width:0;max-width:min(360px,45cqw);height:28px;padding:0 4px 0 8px;border:0;border-radius:24px;outline:0;background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;font-weight:500;line-height:20px;cursor:pointer}.cpaModelSelectTrigger:hover:not(:disabled),.cpaModelSelectTrigger[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover)}.cpaModelSelectTrigger:focus-visible{box-shadow:0 0 0 2px var(--dsw-alias-border-l3)}.cpaModelSelectTrigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.cpaModelSelectBolt{flex:none;font-size:11px;line-height:1;color:var(--dsw-alias-label-primary)}.cpaModelSelectLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectEffort{flex:none;color:var(--dsw-alias-label-caption)}.cpaModelSelectChevron{flex:none;color:var(--dsw-alias-label-caption);transition:transform 120ms;font-size:10px}.cpaModelSelectTrigger[aria-expanded=true] .cpaModelSelectChevron{transform:rotate(180deg)}
 .cpaModelSelectMenu,.cpaModelSelectSubmenu{position:absolute;z-index:30;box-sizing:border-box;width:max-content;min-width:min(240px,calc(100vw - 32px));max-width:min(420px,calc(100vw - 32px));max-height:min(360px,calc(100vh - 96px));padding:4px;border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;background:var(--dsw-specific-menu);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);overflow:hidden}.cpaModelSelectMenu{right:0;bottom:calc(100% + 8px);overflow:visible}.cpaModelSelectSubmenu{right:calc(100% + 8px);bottom:0;min-width:min(230px,calc(100vw - 32px))}.cpaModelSelectCell{display:flex;align-items:center;gap:8px;width:100%;min-width:100%;height:40px;box-sizing:border-box;padding:0 10px;border:0;border-radius:10px;background:transparent;color:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.cpaModelSelectCell:hover,.cpaModelSelectCell:focus-visible,.cpaModelSelectCell[data-open=true]{background:var(--dsw-alias-interactive-bg-hover);outline:0}.cpaModelSelectCell:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.cpaModelSelectCellLabel{flex:none;white-space:nowrap}.cpaModelSelectCellValue{flex:auto;min-width:0;overflow:hidden;color:var(--dsw-alias-label-tertiary);text-align:right;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectCellChevron{flex:none;color:var(--dsw-alias-label-tertiary);font-size:10px}.cpaModelSelectGroups{min-height:0;max-height:352px;overflow-y:auto}.cpaModelSelectGroup+.cpaModelSelectGroup{margin-top:4px}.cpaModelSelectGroupTitle{position:sticky;top:0;z-index:1;padding:5px 8px 3px;background:var(--dsw-specific-menu);color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:500;line-height:18px}.cpaModelSelectOption{display:flex;align-items:center;gap:8px;width:100%;min-width:100%;min-height:38px;box-sizing:border-box;padding:6px 8px;border:0;border-radius:10px;outline:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.cpaModelSelectOption:hover:not(:disabled),.cpaModelSelectOption:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}.cpaModelSelectOption:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.cpaModelSelectOptionCopy{display:flex;flex:1;min-width:0;flex-direction:column}.cpaModelSelectOptionName{overflow:hidden;color:inherit;font-size:14px;font-weight:500;line-height:20px;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectOptionDescription{overflow:hidden;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectCheck{display:grid;place-items:center;flex:0 0 18px;color:var(--dsw-alias-label-primary);font-size:12px}.cpaModelSelectStatus,.cpaModelSelectEmpty{padding:10px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px}.cpaModelSelectError,.cpaModelSelectWarning{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px;padding:7px 8px;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}.cpaModelSelectWarning{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-state-warn-label)}.cpaModelSelectRetry{flex:none;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer}
+.cpaSpeedChip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border:1px solid var(--dsw-alias-border-l4);border-radius:12px;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:500;line-height:1;cursor:pointer}.cpaSpeedChip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.cpaSpeedChip[data-fast=true]{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-interactive-bg-hover)}.cpaSpeedChip:disabled{cursor:default;opacity:.5}
+.cpaModalOverlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.32)}
+.cpaModal{box-sizing:border-box;width:min(520px,calc(100vw - 48px));max-height:min(480px,calc(100vh - 96px));display:flex;flex-direction:column;gap:8px;padding:16px;border-radius:12px;background:var(--dsw-specific-menu,#fff);box-shadow:var(--dsw-shadow-lv3,0 8px 32px rgba(0,0,0,.18));color:var(--dsw-alias-label-primary,#1f2329)}
+.cpaModalTitle{margin:0;font-size:15px;font-weight:600}
+.cpaModalHint{margin:0;color:var(--dsw-alias-label-tertiary,#8f959e);font-size:12px;line-height:1.5}
+.cpaModalList{flex:1;min-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;border:1px solid var(--dsw-alias-border-l4,rgba(31,35,41,.14));border-radius:8px}
+.cpaModalRow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:0;border-radius:6px;color:inherit;font-size:13px;line-height:1.5;text-align:left;cursor:pointer;background:transparent;width:100%}
+.cpaModalRow:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.cpaModalRowId{color:var(--dsw-alias-label-tertiary,#8f959e);font-size:12px}
+.cpaModalToolbar{display:flex;gap:8px;align-items:center}
+.cpaModalActions{display:flex;gap:8px;justify-content:flex-end}
+.cpaModalStatus{padding:12px;color:var(--dsw-alias-label-tertiary,#8f959e);font-size:13px}
+.cpaModalError{padding:12px;color:var(--dsw-alias-state-error-primary,#d84a4a);font-size:12px}
+.cpaModalButton{appearance:none;cursor:pointer;border:1px solid var(--dsw-alias-border-l2,rgba(31,35,41,.14));border-radius:8px;background:none;color:var(--dsw-alias-label-secondary,#717782);padding:4px 12px;font:inherit;font-size:13px;line-height:1.5}
+.cpaModalButtonPrimary{background:var(--dsw-alias-label-primary,#1f2329);color:var(--dsw-alias-bg-layer-3,#fff);border-color:transparent}
+.cpaModalButton:disabled{cursor:default;opacity:.4}
 `
 
     const styles = {
@@ -288,6 +327,8 @@ window.__ModuleLoader__.load({
      * Validate the draft against the live catalog, store the credential, then
      * persist the namespace. The server plugin owns the route and syncs the
      * catalog itself once baseURL lands; no profile handoff is needed.
+     * `preferences.models` is the model whitelist: an empty array serves the
+     * whole catalog.
      */
     async function installConfiguration(operations, baseURL, apiKey, preferences, messages) {
       const credential = await operations.describeCredential(CREDENTIAL_REF)
@@ -303,6 +344,7 @@ window.__ModuleLoader__.load({
         { op: 'set', path: [BASE_URL_FIELD], value: baseURL },
         { op: 'set', path: [SPEED_MODE_FIELD], value: preferences.speedMode },
         { op: 'set', path: [WEB_SEARCH_FIELD], value: preferences.webSearch },
+        { op: 'set', path: [MODELS_FIELD], value: preferences.models ?? [] },
       ])
       return { discovered, hasCredential: Boolean(apiKey || credential?.configured) }
     }
@@ -310,6 +352,7 @@ window.__ModuleLoader__.load({
     async function removeConfiguration(operations) {
       await operations.mutateSettings(SETTINGS_NS, [
         { op: 'unset', path: [BASE_URL_FIELD] },
+        { op: 'unset', path: [MODELS_FIELD] },
       ])
     }
 
@@ -328,6 +371,8 @@ window.__ModuleLoader__.load({
       const [apiKey, setApiKey] = useState('')
       const [speedMode, setSpeedMode] = useState(SPEED_MODE_STANDARD)
       const [webSearch, setWebSearch] = useState(true)
+      const [modelFilter, setModelFilter] = useState(null)
+      const [modalOpen, setModalOpen] = useState(false)
       const [loadedRevision, setLoadedRevision] = useState(undefined)
       const [credentialStatus, setCredentialStatus] = useState('unknown')
       const [saving, setSaving] = useState(false)
@@ -344,9 +389,10 @@ window.__ModuleLoader__.load({
         setBaseURL(configured ? snapshot.baseURL : DEFAULT_BASE_URL)
         setSpeedMode(snapshot.speedMode)
         setWebSearch(snapshot.webSearch)
+        setModelFilter(snapshot.models)
         setApiKey('')
         setLoadedRevision(snapshot.revision)
-      }, [loadedRevision, configured, snapshot.baseURL, snapshot.speedMode, snapshot.webSearch, snapshot.revision, snapshot.status])
+      }, [loadedRevision, configured, snapshot.baseURL, snapshot.speedMode, snapshot.webSearch, snapshot.models, snapshot.revision, snapshot.status])
 
       useEffect(() => {
         let active = true
@@ -370,6 +416,20 @@ window.__ModuleLoader__.load({
         }
       }, [operations, remote])
 
+      const fetchModelList = async () => {
+        const draftBaseURL = baseURL.trim().replace(/\/+$/, '')
+        validBaseURL(draftBaseURL, messages)
+        const draftApiKey = apiKey.trim()
+        const discovered = await operations.discoverModels(SETTINGS_NS, {
+          provider: PROVIDER,
+          baseURL: draftBaseURL,
+          api: 'openai-responses',
+          ...(draftApiKey ? { apiKey: draftApiKey } : {}),
+        })
+        if (!discovered.length) throw new Error(messages.noModels)
+        return discovered
+      }
+
       const submit = async (event) => {
         event.preventDefault()
         if (!canWrite) return
@@ -379,7 +439,7 @@ window.__ModuleLoader__.load({
         setFeedback({ text: '', error: false })
         try {
           validBaseURL(nextBaseURL, messages)
-          const result = await installConfiguration(operations, nextBaseURL, nextApiKey, { speedMode, webSearch }, messages)
+          const result = await installConfiguration(operations, nextBaseURL, nextApiKey, { speedMode, webSearch, models: modelFilter ?? [] }, messages)
           setApiKey('')
           setFeedback({ text: t('saved') + ' ' + result.discovered.length + ' ' + t('modelsSynced'), error: false })
         } catch (error) {
@@ -505,6 +565,38 @@ window.__ModuleLoader__.load({
             React.createElement('span', { style: styles.label }, t('webSearch')),
             React.createElement('span', { style: styles.hint }, t('webSearchHint')),
           ),
+          React.createElement(
+            'div',
+            { style: styles.fieldRow },
+            React.createElement('span', { style: styles.label }, t('modelsLabel')),
+            React.createElement(
+              'span',
+              { style: styles.hint, role: 'status' },
+              modelFilter === null ? t('modelsAll') : fill(t('modelsSelected'), { count: modelFilter.length }),
+            ),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                style: canWrite ? styles.buttonSecondary : { ...styles.buttonSecondary, ...styles.buttonDisabled },
+                disabled: !canWrite,
+                onClick: () => setModalOpen(true),
+              },
+              t('fetchModels'),
+            ),
+          ),
+          modalOpen
+            ? React.createElement(ModelFilterModal, {
+              fetchModels: fetchModelList,
+              initialSelection: modelFilter,
+              onApply: (selection) => {
+                setModelFilter(selection)
+                setModalOpen(false)
+              },
+              onClose: () => setModalOpen(false),
+              t,
+            })
+            : null,
           feedback.text
             ? React.createElement(
               'p',
@@ -556,12 +648,16 @@ window.__ModuleLoader__.load({
         getSnapshot: () => {
           const snap = scope.getSnapshot()
           const value = snap?.value ?? {}
+          const models = Array.isArray(value?.[MODELS_FIELD])
+            ? value[MODELS_FIELD].filter((id) => typeof id === 'string' && id.length > 0)
+            : []
           const key = [
             snap?.status ?? 'loading',
             snap?.revision ?? '',
             snap?.writable === true,
             value?.[SPEED_MODE_FIELD] ?? '',
             value?.[WEB_SEARCH_FIELD] ?? '',
+            JSON.stringify(models),
           ].join(':')
           if (key === cachedKey) return cachedSnapshot
           cachedKey = key
@@ -572,6 +668,8 @@ window.__ModuleLoader__.load({
             baseURL: typeof value?.[BASE_URL_FIELD] === 'string' ? value[BASE_URL_FIELD] : undefined,
             speedMode: value?.[SPEED_MODE_FIELD] === SPEED_MODE_FAST ? SPEED_MODE_FAST : SPEED_MODE_STANDARD,
             webSearch: value?.[WEB_SEARCH_FIELD] !== false,
+            // null = no filter: the whole catalog is served.
+            models: models.length > 0 ? models : null,
           })
           return cachedSnapshot
         },
@@ -824,6 +922,163 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * Composer-side speed state: a chip beside the composer actions, rendered
+     * whenever the selected model is a Fast-capable CLIProxyAPI route. Clicking
+     * toggles the global speedMode preference directly.
+     */
+    function SpeedIndicator({ directory, preference, t }) {
+      const state = useSyncExternalStore(directory.subscribe, directory.getSnapshot)
+      const snapshot = usePreferenceSnapshot(preference)
+      if (state.current?.provider !== PROVIDER || !supportsFastMode(state.current?.model)) return null
+      const fast = snapshot.speedMode === SPEED_MODE_FAST
+      const writable = snapshot.status === 'ready' && snapshot.writable === true
+      const label = t(fast ? 'speedFast' : 'speedStandard')
+      return React.createElement(
+        'button',
+        {
+          type: 'button',
+          className: 'cpaSpeedChip',
+          'data-fast': fast,
+          'aria-pressed': fast,
+          title: fill(t('speedIndicator'), { value: label }),
+          disabled: !writable,
+          onClick: () => {
+            if (!writable) return
+            void preference.set({ [SPEED_MODE_FIELD]: fast ? SPEED_MODE_STANDARD : SPEED_MODE_FAST })
+          },
+        },
+        fast ? '⚡ ' : '',
+        label,
+      )
+    }
+
+    /**
+     * The fetch-then-filter flow of the built-in provider editors: discovery
+     * runs against the draft connection, the modal stages a checkbox selection,
+     * and Apply hands it to the form (Save persists).
+     */
+    function ModelFilterModal({ fetchModels, initialSelection, onApply, onClose, t }) {
+      const [status, setStatus] = useState('loading')
+      const [error, setError] = useState('')
+      const [models, setModels] = useState([])
+      const [checked, setChecked] = useState(() => new Set())
+
+      useEffect(() => {
+        let active = true
+        fetchModels().then((list) => {
+          if (!active) return
+          setModels(list)
+          const selected = initialSelection
+          setChecked(new Set(selected === null ? list.map((model) => model.id) : list.filter((model) => selected.includes(model.id)).map((model) => model.id)))
+          setStatus('ready')
+        }, (fetchError) => {
+          if (!active) return
+          setError(fetchError instanceof Error ? fetchError.message : String(fetchError))
+          setStatus('error')
+        })
+        return () => {
+          active = false
+        }
+      }, [])
+
+      useEffect(() => {
+        const onKey = (event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            onClose()
+          }
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [onClose])
+
+      const toggle = (id) => {
+        setChecked((current) => {
+          const next = new Set(current)
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+          return next
+        })
+      }
+      const apply = () => {
+        // Checking every fetched model is equivalent to serving the catalog.
+        onApply(checked.size >= models.length ? null : [...checked])
+      }
+
+      return React.createElement(
+        'div',
+        { className: 'cpaModalOverlay', role: 'presentation', onMouseDown: (event) => {
+          if (event.target === event.currentTarget) onClose()
+        } },
+        React.createElement(
+          'div',
+          { className: 'cpaModal', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('modelsModalTitle') },
+          React.createElement('h3', { className: 'cpaModalTitle' }, t('modelsModalTitle')),
+          React.createElement('p', { className: 'cpaModalHint' }, t('modelsModalHint')),
+          status === 'loading'
+            ? React.createElement('div', { className: 'cpaModalStatus', role: 'status' }, t('modelsLoading'))
+            : null,
+          status === 'error'
+            ? React.createElement('div', { className: 'cpaModalError', role: 'alert' }, error)
+            : null,
+          status === 'ready'
+            ? React.createElement(
+              React.Fragment,
+              null,
+              React.createElement(
+                'div',
+                { className: 'cpaModalToolbar' },
+                React.createElement('button', { type: 'button', className: 'cpaModalButton', onClick: () => setChecked(new Set(models.map((model) => model.id))) }, t('selectAll')),
+                React.createElement('button', { type: 'button', className: 'cpaModalButton', onClick: () => setChecked(new Set()) }, t('selectNone')),
+                React.createElement('span', { className: 'cpaModalHint' }, fill(t('modelsSelected'), { count: checked.size })),
+              ),
+              React.createElement(
+                'div',
+                { className: 'cpaModalList', role: 'group', 'aria-label': t('modelsModalTitle') },
+                models.map((model) => React.createElement(
+                  'button',
+                  {
+                    key: model.id,
+                    type: 'button',
+                    className: 'cpaModalRow',
+                    role: 'checkbox',
+                    'aria-checked': checked.has(model.id),
+                    onClick: () => toggle(model.id),
+                  },
+                  React.createElement('input', {
+                    type: 'checkbox',
+                    checked: checked.has(model.id),
+                    readOnly: true,
+                    tabIndex: -1,
+                  }),
+                  React.createElement('span', null, model.name || model.id),
+                  model.name && model.name !== model.id
+                    ? React.createElement('span', { className: 'cpaModalRowId' }, model.id)
+                    : null,
+                )),
+              ),
+            )
+            : null,
+          React.createElement(
+            'div',
+            { className: 'cpaModalActions' },
+            React.createElement('button', { type: 'button', className: 'cpaModalButton', onClick: onClose }, t('cancel')),
+            React.createElement(
+              'button',
+              {
+                type: 'button',
+                className: 'cpaModalButton cpaModalButtonPrimary',
+                disabled: status !== 'ready' || checked.size === 0,
+                onClick: apply,
+              },
+              t('applySelection'),
+            ),
+          ),
+        ),
+      )
+    }
+
     function createOperations(remote) {
       return {
         describeCredential: async (ref) => {
@@ -881,6 +1136,19 @@ window.__ModuleLoader__.load({
           }
         },
       }, CliProxyModelSelect))
+      // The composer-side speed state chip, rendered only for Fast-capable
+      // CLIProxyAPI selections.
+      ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+        name: 'conversation.input.right',
+        id: 'cliproxyapi-speed',
+        order: 15,
+        locale: SETTINGS_LOCALE_NS,
+        inject: (sessionId) => ({
+          directory: modelDirectories.directoryFor(sessionId).store,
+          preference,
+          t,
+        }),
+      }, SpeedIndicator))
     }
 
     function apply(ctx) {

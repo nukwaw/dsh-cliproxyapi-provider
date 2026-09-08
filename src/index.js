@@ -8,12 +8,14 @@ import {
   BASE_URL_FIELD,
   DEFAULT_SPEED_MODE,
   DEFAULT_WEB_SEARCH,
+  MODELS_FIELD,
   SETTINGS_NAMESPACE,
   SPEED_MODE_FAST,
   SPEED_MODE_FIELD,
   SPEED_MODE_STANDARD,
   WEB_SEARCH_FIELD,
   normalizeBaseURL,
+  normalizeModelFilter,
   normalizeSpeedMode,
   normalizeWebSearch,
 } from './settings-contract.js'
@@ -146,6 +148,7 @@ export function apply(ctx, config) {
     [BASE_URL_FIELD]: z.string(),
     [SPEED_MODE_FIELD]: z.union([SPEED_MODE_STANDARD, SPEED_MODE_FAST]).default(DEFAULT_SPEED_MODE),
     [WEB_SEARCH_FIELD]: z.boolean().default(DEFAULT_WEB_SEARCH),
+    [MODELS_FIELD]: z.array(z.string()).default([]),
   }))
 
   let catalog
@@ -186,9 +189,16 @@ export function apply(ctx, config) {
       return profileSnapshot
     }
     const headers = profileHeadersOf(config.headers, hasStoredKey)
-    const key = JSON.stringify([baseURL, catalogRevision, headers])
+    // The model whitelist needs no catalog refetch: it rides the profile key
+    // so the next adapter operation rebuilds on the changed selection.
+    const filter = normalizeModelFilter(settings.get()?.[MODELS_FIELD])
+    const key = JSON.stringify([baseURL, catalogRevision, headers, filter])
     if (key === profileKey) return profileSnapshot
-    const piModels = catalog.models.map((model) => toPiModel(model, baseURL, PROVIDER))
+    const allowed = new Set(filter)
+    const listed = allowed.size === 0
+      ? catalog.models
+      : catalog.models.filter((model) => allowed.has(model.id))
+    const piModels = listed.map((model) => toPiModel(model, baseURL, PROVIDER))
     profileKey = key
     profileSnapshot = new Map([[PROVIDER, Object.freeze({
       provider: PROVIDER,

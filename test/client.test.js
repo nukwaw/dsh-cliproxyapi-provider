@@ -201,7 +201,7 @@ test('configuration validates the draft, stores the key, and writes the namespac
     operations,
     'http://127.0.0.1:8317/v1',
     'sk-new',
-    { speedMode: 'fast', webSearch: false },
+    { speedMode: 'fast', webSearch: false, models: ['gpt-5.6-sol'] },
     messages,
   )
   assert.equal(discoveryNs, 'llm-cliproxyapi')
@@ -215,6 +215,7 @@ test('configuration validates the draft, stores the key, and writes the namespac
       { op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' },
       { op: 'set', path: ['speedMode'], value: 'fast' },
       { op: 'set', path: ['webSearch'], value: false },
+      { op: 'set', path: ['models'], value: ['gpt-5.6-sol'] },
     ],
   })
   assert.equal(result.discovered.length, 1)
@@ -250,7 +251,10 @@ test('removing the configuration unsets the base URL', async () => {
   await plugin.removeConfiguration(operations)
   assert.deepEqual(mutations, [{
     ns: 'llm-cliproxyapi',
-    ops: [{ op: 'unset', path: ['baseURL'] }],
+    ops: [
+      { op: 'unset', path: ['baseURL'] },
+      { op: 'unset', path: ['models'] },
+    ],
   }])
 })
 

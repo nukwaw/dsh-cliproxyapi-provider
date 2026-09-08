@@ -186,6 +186,30 @@ test('migrates a legacy llm-pi-ai profile and wins the route it held', async () 
   }
 })
 
+test('the model whitelist narrows the served catalog without a refetch', async () => {
+  const stack = await startStack()
+  try {
+    const { ctx, harness } = stack
+    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' }])
+    await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
+    assert.deepEqual((await ctx.llm.listModels('CLIProxyAPI')).map((model) => model.id), ['gpt-5.6-sol', 'kimi-for-coding'])
+    const catalogFetches = harness.requests.filter((request) => request.url.includes('/models?')).length
+
+    // The whitelist applies on the next adapter operation — no catalog round-trip.
+    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['models'], value: ['kimi-for-coding'] }])
+    assert.deepEqual((await ctx.llm.listModels('CLIProxyAPI')).map((model) => model.id), ['kimi-for-coding'])
+    assert.equal(harness.requests.filter((request) => request.url.includes('/models?')).length, catalogFetches)
+
+    // Stale ids simply match nothing; clearing restores the whole catalog.
+    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['models'], value: ['gone-model'] }])
+    assert.deepEqual(await ctx.llm.listModels('CLIProxyAPI'), [])
+    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['models'], value: [] }])
+    assert.deepEqual((await ctx.llm.listModels('CLIProxyAPI')).map((model) => model.id), ['gpt-5.6-sol', 'kimi-for-coding'])
+  } finally {
+    await stack.dispose()
+  }
+})
+
 test('streams through the plugin adapter with the placeholder when keyless', async () => {
   const stack = await startStack()
   try {
