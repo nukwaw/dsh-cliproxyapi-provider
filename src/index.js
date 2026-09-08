@@ -2,14 +2,14 @@ import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { assertUsableApiKey, attributionHeaders } from '@deepseek-ai/dsh-llm'
 import { Config as PiAiConfig } from '@deepseek-ai/dsh-llm-pi-ai'
-import { deepEqualJson, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import { catalogURL, readCodexCatalog } from './catalog.js'
 
 const MAX_CATALOG_BYTES = 4 * 1024 * 1024
 const DISCOVERY_HANDOFF_TTL_MS = 60000
 const MAX_DISCOVERY_HANDOFFS = 8
-const DISCOVERY_NS = settingsNamespace('llm-cliproxyapi')
-const PI_NS = settingsNamespace('llm-pi-ai')
+const DISCOVERY_NS = 'llm-cliproxyapi'
+const PI_NS = 'llm-pi-ai'
 const API_KEY_REF = credentialRef('DSH_CLIPROXY_API_KEY')
 const PROVIDER = 'CLIProxyAPI'
 
@@ -279,7 +279,7 @@ export function apply(ctx, config) {
     return handoff.models
   }
 
-  ctx.llm.registerModelDiscovery(DISCOVERY_NS, async (request) => {
+  ctx.llm.registerModelDiscovery(DISCOVERY_NS, async (request, signal) => {
     const catalog = await discoverCatalog(ctx, {
       baseURL: request.baseURL,
       defaultContextWindow: config.defaultContextWindow,
@@ -287,7 +287,7 @@ export function apply(ctx, config) {
       defaultInput: config.defaultInput,
       headers: config.headers,
       fetchTimeoutMs: config.fetchTimeoutMs,
-    }, request.apiKey, request.signal)
+    }, request.apiKey, signal)
     rememberDiscovery(request.baseURL, catalog.models)
     return catalog.models
   })

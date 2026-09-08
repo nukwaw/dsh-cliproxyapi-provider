@@ -156,8 +156,7 @@ test('initial discovery requests the fixed rich catalog and returns full capabil
       provider: 'CLIProxyAPI',
       baseURL: 'http://127.0.0.1:8317/v1',
       apiKey: 'secret-key',
-      signal: new AbortController().signal,
-    })
+    }, new AbortController().signal)
     assert.equal(
       requestURL,
       'http://127.0.0.1:8317/v1/models?client_version=dsh-cliproxyapi-provider',
@@ -206,8 +205,7 @@ test('first profile synchronization restores capabilities stripped by the browse
     const discovered = await harness.discoveries.get('llm-cliproxyapi')({
       provider: 'CLIProxyAPI',
       baseURL: 'http://127.0.0.1:8317/v1',
-      signal: new AbortController().signal,
-    })
+    }, new AbortController().signal)
     const bootstrapModels = discovered.map(({ id, name, contextWindow, maxTokens }) => ({
       id, name, contextWindow, maxTokens,
     }))
@@ -235,7 +233,7 @@ test('first profile synchronization restores capabilities stripped by the browse
       reasoningEfforts: {
         low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
       },
-      compat: { chatTemplateKwargs: {} },
+      compat: { chatTemplateKwargs: {}, chatTemplateArgs: {} },
     })
     assert.deepEqual(profile.models[1].input, ['text'])
     await waitFor(() => harness.timeouts.some((row) => row.delay === 300000))
@@ -503,7 +501,6 @@ test('real Cordis composition leaves llm-pi-ai as the sole directory owner', asy
     const discovered = await ctx.llm.discoverModels('llm-cliproxyapi', {
       provider: 'CLIProxyAPI',
       baseURL: 'http://127.0.0.1:8317/v1',
-      signal: new AbortController().signal,
     })
     assert.equal(discovered[0].input, undefined)
     assert.equal(discovered[1].reasoningEfforts, undefined)

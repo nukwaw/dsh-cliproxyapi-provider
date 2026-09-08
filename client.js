@@ -21,10 +21,19 @@ window.__ModuleLoader__.load({
     const PROFILE_SYNC_HEADER = 'x-dsh-provider-cpa-sync'
     const PROFILE_SYNC_TIMEOUT_MS = 30000
     const PLACEHOLDER_AUTHORIZATION = 'Bearer dsh-cliproxyapi-no-key'
-    const SETTINGS_SLOT = 'settings.plugins.tab'
-    const SETTINGS_TAB_ID = 'cliproxyapi'
+    const SETTINGS_SLOT = 'settings.section'
+    const SETTINGS_SECTION_ID = 'cliproxyapi'
+    const SETTINGS_SECTION_ORDER = 20
     const SETTINGS_LOCALE_NS = 'settings.cliProxyApi'
-    const inject = ['connection', 'remote', 'slots', 'locale', 'settingsScope']
+    const inject = [
+      'slots',
+      'locale',
+      'remote',
+      'remote.credentials',
+      'remote.llm',
+      'remote.settings',
+      'settingsScope',
+    ]
 
     const copy = {
       en: {
@@ -34,14 +43,20 @@ window.__ModuleLoader__.load({
         loading: 'Loading CLIProxyAPI settings…',
         unavailable: 'CLIProxyAPI settings are unavailable in this Web profile.',
         readOnly: 'Settings are read-only for this connection.',
+        statusConfigured: 'Connected',
+        modelsSynced: 'models synchronized',
+        notConfigured: 'CLIProxyAPI is not configured yet.',
         baseURL: 'Base URL',
         apiKey: 'API key',
         apiKeyPlaceholder: 'Optional for a keyless CLIProxyAPI server',
         apiKeyConfiguredPlaceholder: 'API key already saved',
         credentialConfiguredLabel: 'Configured',
-        save: 'Save & Enable',
+        save: 'Save & Sync',
         saving: 'Saving…',
         saved: 'Saved. The CLIProxyAPI model catalog is synchronized.',
+        remove: 'Remove',
+        removing: 'Removing…',
+        removed: 'The CLIProxyAPI provider was removed.',
         syncTimeout: 'Timed out waiting for CLIProxyAPI to write the complete model catalog.',
         baseRequired: 'Base URL is required.',
         baseInvalid: 'Base URL must be a valid HTTP or HTTPS URL.',
@@ -54,14 +69,20 @@ window.__ModuleLoader__.load({
         loading: '正在读取 CLIProxyAPI 设置…',
         unavailable: '当前 Web 配置中无法访问 CLIProxyAPI 设置。',
         readOnly: '当前连接的设置为只读。',
+        statusConfigured: '已连接',
+        modelsSynced: '个模型已同步',
+        notConfigured: '尚未配置 CLIProxyAPI。',
         baseURL: 'Base URL',
         apiKey: 'API Key',
         apiKeyPlaceholder: '无鉴权的 CLIProxyAPI 可留空',
         apiKeyConfiguredPlaceholder: '已保存 API Key',
         credentialConfiguredLabel: '已配置',
-        save: '保存并启用',
+        save: '保存并同步',
         saving: '保存中…',
         saved: '已保存，CLIProxyAPI 模型目录已同步。',
+        remove: '移除',
+        removing: '移除中…',
+        removed: '已移除 CLIProxyAPI 供应商。',
         syncTimeout: '等待 CLIProxyAPI 写入完整模型目录超时。',
         baseRequired: '请填写 Base URL。',
         baseInvalid: 'Base URL 必须是有效的 HTTP 或 HTTPS 地址。',
@@ -74,10 +95,9 @@ window.__ModuleLoader__.load({
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
-        maxWidth: '720px',
-        padding: '24px 16px 40px',
-        margin: '0 auto',
+        gap: '14px',
+        width: '100%',
+        maxWidth: '760px',
         color: 'var(--dsw-alias-label-primary, #1f2329)',
       },
       heading: {
@@ -87,28 +107,45 @@ window.__ModuleLoader__.load({
       },
       title: {
         margin: 0,
-        fontSize: '16px',
+        fontSize: '18px',
         fontWeight: 600,
+        lineHeight: 1.4,
       },
       intro: {
         margin: 0,
-        color: 'var(--dsw-alias-label-secondary, #717782)',
+        color: 'var(--dsw-alias-label-tertiary, #8f959e)',
         fontSize: '13px',
         lineHeight: 1.5,
+      },
+      status: {
+        margin: 0,
+        color: 'var(--dsw-alias-label-tertiary, #8f959e)',
+        fontSize: '13px',
+        lineHeight: 1.5,
+        overflowWrap: 'anywhere',
+      },
+      statusError: {
+        margin: 0,
+        color: 'var(--dsw-alias-label-error, #d84a4a)',
+        fontSize: '13px',
+        lineHeight: 1.5,
+        overflowWrap: 'anywhere',
       },
       form: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
+        gap: '6px',
       },
       field: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '7px',
+        gap: '6px',
+        padding: '12px 0',
       },
       label: {
-        fontSize: '14px',
+        fontSize: '13px',
         fontWeight: 500,
+        lineHeight: 1.5,
       },
       labelRow: {
         display: 'flex',
@@ -116,63 +153,59 @@ window.__ModuleLoader__.load({
         gap: '8px',
       },
       credentialStatus: {
-        color: 'var(--dsw-alias-label-secondary, #717782)',
+        color: 'var(--dsw-alias-label-tertiary, #8f959e)',
         fontSize: '12px',
         fontWeight: 400,
+        lineHeight: 1.5,
       },
       input: {
         boxSizing: 'border-box',
         width: '100%',
-        minHeight: '38px',
-        border: '1px solid var(--dsw-alias-border-primary, rgba(31, 35, 41, 0.14))',
-        borderRadius: '10px',
-        background: 'var(--dsw-alias-bg-layer-1, transparent)',
+        height: '34px',
+        border: '0.5px solid var(--dsw-alias-border-l4, rgba(31, 35, 41, 0.14))',
+        borderRadius: '8px',
+        background: 'var(--dsw-alias-bg-layer-3, transparent)',
         color: 'var(--dsw-alias-label-primary, #1f2329)',
-        padding: '8px 12px',
+        padding: '0 12px',
         font: 'inherit',
-      },
-      status: {
-        margin: 0,
-        color: 'var(--dsw-alias-label-secondary, #717782)',
         fontSize: '13px',
-        lineHeight: 1.4,
-      },
-      statusError: {
-        margin: 0,
-        color: '#d84a4a',
-        fontSize: '13px',
-        lineHeight: 1.4,
+        lineHeight: 1.5,
       },
       actions: {
         display: 'flex',
         justifyContent: 'flex-end',
-        gap: '10px',
-        paddingTop: '4px',
+        alignItems: 'center',
+        gap: '8px',
+        paddingTop: '12px',
       },
       button: {
+        appearance: 'none',
         cursor: 'pointer',
-        minHeight: '38px',
         border: '1px solid transparent',
-        borderRadius: '10px',
-        background: 'var(--dsw-alias-brand-primary, #111827)',
-        color: '#fff',
-        padding: '8px 14px',
+        borderRadius: '8px',
+        background: 'var(--dsw-alias-label-primary, #1f2329)',
+        color: 'var(--dsw-alias-bg-layer-3, #fff)',
+        padding: '5px 14px',
         font: 'inherit',
+        fontSize: '13px',
+        lineHeight: 1.5,
+      },
+      buttonSecondary: {
+        appearance: 'none',
+        cursor: 'pointer',
+        border: '1px solid var(--dsw-alias-border-l2, rgba(31, 35, 41, 0.14))',
+        borderRadius: '8px',
+        background: 'none',
+        color: 'var(--dsw-alias-label-secondary, #717782)',
+        padding: '5px 14px',
+        font: 'inherit',
+        fontSize: '13px',
+        lineHeight: 1.5,
       },
       buttonDisabled: {
         cursor: 'default',
-        opacity: 0.55,
+        opacity: 0.4,
       },
-    }
-
-    function unwrap(response) {
-      if (!response || !response.result || !response.result.ok) {
-        const message = response && response.result && response.result.error
-          ? response.result.error.message
-          : 'Harness request failed'
-        throw new Error(message)
-      }
-      return response.result.value
     }
 
     function validBaseURL(value, messages) {
@@ -265,35 +298,33 @@ window.__ModuleLoader__.load({
       return ready
     }
 
-    async function installInitialProfile(api, scope, baseURL, apiKey, messages) {
-      const described = unwrap(await api.settings.describe({}))
-      const namespace = described.namespaces.find((entry) => entry.ns === PI_NS)
-      if (!namespace) throw new Error('The llm-pi-ai settings namespace is unavailable')
-
-      const credentialResult = unwrap(await api.credentials.describe({ refs: [CREDENTIAL_REF] }))
-      const credential = credentialResult.credentials[CREDENTIAL_REF] || { configured: false }
-      const discovered = unwrap(await api.llm.discoverModels({
-        settingsNs: DISCOVERY_NS,
+    async function installInitialProfile(operations, scope, baseURL, apiKey, messages) {
+      const revision = scope.getSnapshot().revision
+      const credential = await operations.describeCredential(CREDENTIAL_REF)
+      const discovered = await operations.discoverModels(DISCOVERY_NS, {
         provider: PROVIDER,
         baseURL,
         api: 'openai-responses',
         ...(apiKey ? { apiKey } : {}),
-      })).models
+      })
       if (!discovered.length) throw new Error(messages.noModels)
 
-      if (apiKey) unwrap(await api.credentials.set({ ref: CREDENTIAL_REF, value: apiKey }))
-      const hasCredential = Boolean(apiKey || credential.configured)
+      if (apiKey) await operations.storeCredential(CREDENTIAL_REF, apiKey)
+      const hasCredential = Boolean(apiKey || credential?.configured)
       const syncToken = createSyncToken()
-      const updated = unwrap(await api.settings.mutate({
-        ns: PI_NS,
-        ops: [{
-          op: 'set',
-          path: ['providers', PROVIDER],
-          value: bootstrapProfileOf(baseURL, discovered, hasCredential, syncToken),
-        }],
-        ...(Number.isInteger(namespace.revision) ? { expectedRevision: namespace.revision } : {}),
-      }))
+      const updated = await operations.mutateSettings(PI_NS, [{
+        op: 'set',
+        path: ['providers', PROVIDER],
+        value: bootstrapProfileOf(baseURL, discovered, hasCredential, syncToken),
+      }], revision)
       return waitForProfileSynchronization(scope, baseURL, updated, messages)
+    }
+
+    async function removeProfile(operations, scope) {
+      await operations.mutateSettings(PI_NS, [{
+        op: 'unset',
+        path: ['providers', PROVIDER],
+      }], scope.getSnapshot().revision)
     }
 
     function profileOf(snapshot) {
@@ -313,33 +344,25 @@ window.__ModuleLoader__.load({
       }
     }
 
-    async function credentialStatusOf(api) {
-      try {
-        const described = unwrap(await api.credentials.describe({ refs: [CREDENTIAL_REF] }))
-        return described.credentials[CREDENTIAL_REF]?.configured === true
-          ? 'configured'
-          : 'missing'
-      } catch {
-        return 'unknown'
-      }
-    }
-
-    function SettingsTab({ api, remote, scope, t }) {
+    function SettingsSection({ operations, remote, scope, t }) {
       const snapshot = useSyncExternalStore(
         (listener) => scope.subscribe(listener),
         () => scope.getSnapshot(),
         () => scope.getSnapshot(),
       )
       const profile = profileOf(snapshot)
+      const modelCount = Array.isArray(profile?.models) ? profile.models.length : 0
       const [baseURL, setBaseURL] = useState(DEFAULT_BASE_URL)
       const [apiKey, setApiKey] = useState('')
       const [loadedRevision, setLoadedRevision] = useState(undefined)
       const [credentialStatus, setCredentialStatus] = useState('unknown')
       const [saving, setSaving] = useState(false)
+      const [removing, setRemoving] = useState(false)
       const [feedback, setFeedback] = useState({ text: '', error: false })
       const messages = useMemo(() => messagesOf(t), [t])
       const readOnly = snapshot.status === 'ready' && !snapshot.writable
-      const canSave = snapshot.status === 'ready' && snapshot.writable && !saving
+      const busy = saving || removing
+      const canWrite = snapshot.status === 'ready' && snapshot.writable && !busy
 
       useEffect(() => {
         if (snapshot.status !== 'ready' || snapshot.revision === undefined) return
@@ -354,7 +377,13 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         let active = true
         const refresh = async () => {
-          const status = await credentialStatusOf(api)
+          let status = 'unknown'
+          try {
+            const info = await operations.describeCredential(CREDENTIAL_REF)
+            status = info?.configured === true ? 'configured' : 'missing'
+          } catch {
+            status = 'unknown'
+          }
           if (active) setCredentialStatus(status)
         }
         void refresh()
@@ -365,18 +394,18 @@ window.__ModuleLoader__.load({
           active = false
           dispose()
         }
-      }, [api, remote])
+      }, [operations, remote])
 
       const submit = async (event) => {
         event.preventDefault()
-        if (!canSave) return
+        if (!canWrite) return
         const nextBaseURL = baseURL.trim().replace(/\/+$/, '')
         const nextApiKey = apiKey.trim()
         setSaving(true)
         setFeedback({ text: '', error: false })
         try {
           validBaseURL(nextBaseURL, messages)
-          await installInitialProfile(api, scope, nextBaseURL, nextApiKey, messages)
+          await installInitialProfile(operations, scope, nextBaseURL, nextApiKey, messages)
           setApiKey('')
           setFeedback({ text: t('saved'), error: false })
         } catch (error) {
@@ -389,12 +418,26 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const statusText = snapshot.status === 'loading'
-        ? t('loading')
-        : ''
+      const remove = async () => {
+        if (!canWrite || !profile) return
+        setRemoving(true)
+        setFeedback({ text: '', error: false })
+        try {
+          await removeProfile(operations, scope)
+          setFeedback({ text: t('removed'), error: false })
+        } catch (error) {
+          setFeedback({
+            text: error instanceof Error ? error.message : String(error),
+            error: true,
+          })
+        } finally {
+          setRemoving(false)
+        }
+      }
+
       return React.createElement(
         'div',
-        { style: styles.section, 'aria-busy': saving || snapshot.status === 'loading' },
+        { style: styles.section, 'aria-busy': busy || snapshot.status === 'loading' },
         React.createElement(
           'div',
           { style: styles.heading },
@@ -404,11 +447,20 @@ window.__ModuleLoader__.load({
         snapshot.status === 'unavailable'
           ? React.createElement('p', { style: styles.statusError, role: 'alert' }, t('unavailable'))
           : null,
+        snapshot.status === 'loading'
+          ? React.createElement('p', { style: styles.status, role: 'status' }, t('loading'))
+          : null,
         readOnly
           ? React.createElement('p', { style: styles.status, role: 'status' }, t('readOnly'))
           : null,
-        statusText && snapshot.status !== 'unavailable'
-          ? React.createElement('p', { style: styles.status, role: 'status' }, statusText)
+        snapshot.status === 'ready'
+          ? React.createElement(
+            'p',
+            { style: styles.status, role: 'status' },
+            profile
+              ? t('statusConfigured') + ' · ' + profile.baseURL + ' · ' + modelCount + ' ' + t('modelsSynced')
+              : t('notConfigured'),
+          )
           : null,
         React.createElement(
           'form',
@@ -422,7 +474,7 @@ window.__ModuleLoader__.load({
               type: 'url',
               value: baseURL,
               autoComplete: 'url',
-              disabled: !canSave,
+              disabled: !canWrite,
               onChange: (event) => setBaseURL(event.currentTarget.value),
             }),
           ),
@@ -449,7 +501,7 @@ window.__ModuleLoader__.load({
                 ? t('apiKeyConfiguredPlaceholder')
                 : t('apiKeyPlaceholder'),
               autoComplete: 'off',
-              disabled: !canSave,
+              disabled: !canWrite,
               onChange: (event) => setApiKey(event.currentTarget.value),
             }),
           ),
@@ -463,12 +515,26 @@ window.__ModuleLoader__.load({
           React.createElement(
             'div',
             { style: styles.actions },
+            profile
+              ? React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  style: canWrite
+                    ? styles.buttonSecondary
+                    : { ...styles.buttonSecondary, ...styles.buttonDisabled },
+                  disabled: !canWrite,
+                  onClick: remove,
+                },
+                removing ? t('removing') : t('remove'),
+              )
+              : null,
             React.createElement(
               'button',
               {
                 type: 'submit',
-                style: canSave ? styles.button : { ...styles.button, ...styles.buttonDisabled },
-                disabled: !canSave,
+                style: canWrite ? styles.button : { ...styles.button, ...styles.buttonDisabled },
+                disabled: !canWrite,
               },
               saving ? t('saving') : t('save'),
             ),
@@ -477,13 +543,45 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function createOperations(remote) {
+      return {
+        describeCredential: async (ref) => {
+          const response = await remote.credentials.describe([ref])
+          if (!response || !response.ok) {
+            throw new Error(response?.error?.message || 'Harness request failed')
+          }
+          return response.value[ref]
+        },
+        storeCredential: async (ref, value) => {
+          const response = await remote.credentials.set(ref, value)
+          if (!response || !response.ok) {
+            throw new Error(response?.error?.message || 'Harness request failed')
+          }
+        },
+        discoverModels: async (settingsNs, request) => {
+          const response = await remote.llm.discoverModels(settingsNs, request)
+          if (!response || !response.ok) {
+            throw new Error(response?.error?.message || 'Harness request failed')
+          }
+          return response.value
+        },
+        mutateSettings: async (ns, ops, expectedRevision) => {
+          const response = await remote.settings.mutate(ns, ops, expectedRevision)
+          if (!response || !response.ok) {
+            throw new Error(response?.error?.message || 'Harness request failed')
+          }
+          return response.value
+        },
+      }
+    }
+
     function apply(ctx) {
-      const api = ctx.get('connection').api
-      const remote = ctx.get('remote')
+      const remote = ctx.remote
       const locale = ctx.locale
       const settingsScope = ctx.settingsScope
       const t = locale.bind(SETTINGS_LOCALE_NS)
       const scope = settingsScope.bind({ namespace: PI_NS })
+      const operations = createOperations(remote)
 
       ctx.effect(
         () => locale.register(SETTINGS_LOCALE_NS, copy),
@@ -492,18 +590,19 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject(SETTINGS_SLOT, () => ctx.slots.register({
         name: SETTINGS_SLOT,
-        id: SETTINGS_TAB_ID,
-        order: 30,
+        id: SETTINGS_SECTION_ID,
+        order: SETTINGS_SECTION_ORDER,
         label: () => t('tab'),
         locale: SETTINGS_LOCALE_NS,
-        inject: () => ({ api, remote, scope }),
-      }, SettingsTab))
+        inject: () => ({ operations, remote, scope, t }),
+      }, SettingsSection))
     }
 
     exports.apply = apply
     exports.inject = inject
     exports.installInitialProfile = installInitialProfile
-    exports.settingsTab = SettingsTab
+    exports.removeProfile = removeProfile
+    exports.settingsSection = SettingsSection
     return module.exports
   },
 })
