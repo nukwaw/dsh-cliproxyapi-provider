@@ -1,51 +1,49 @@
 # CLIProxyAPI Provider for DeepSeek Harness
 
-[English](./README_EN.md) | 简体中文
+Adds a `CLIProxyAPI` model provider based on the OpenAI Responses API to DeepSeek Harness.
 
-为 DeepSeek Harness 添加一个基于 OpenAI Responses API 的 `CLIProxyAPI` 模型供应商。
+The plugin automatically retrieves the model list from CLIProxyAPI, so models do not need to be added or maintained manually.
 
-插件会自动从 CLIProxyAPI 获取模型列表，无需手动添加或维护模型。
+## Features
 
-## 功能
+- **Automatic model sync**: reads the catalog from CLIProxyAPI's Codex catalog endpoint (context windows, thinking levels) and refreshes it periodically.
+- **Fast mode**: models whose catalog entries advertise priority service tiers (`service_tiers`) — the GPT family — offer a **Speed: Standard / Fast** choice right in the model picker. Fast dispatches requests with `service_tier: "priority"`.
+- **Server-side web search**: for models flagged `supports_search_tool` in the catalog, requests carry the built-in `web_search` tool and CLIProxyAPI performs the search upstream — no extra search API key needed. Can be turned off on the settings page.
+- **Keyless deployments**: the API key can be left empty when CLIProxyAPI has no authentication.
 
-- **自动模型同步**：从 CLIProxyAPI 的 Codex 目录端点读取模型（含上下文窗口、思考档位），定期刷新。
-- **Fast 模式**：目录中声明了优先级服务层级（`service_tiers`）的模型（如 GPT 系列）可以在模型选择器中切换 **速度：标准 / Fast**。开启 Fast 后，请求会以 `service_tier: "priority"` 派发。
-- **服务端联网搜索**：对目录中标记 `supports_search_tool` 的模型，请求会注入内置 `web_search` 工具，由 CLIProxyAPI 在上游完成搜索，无需额外搜索 API Key。可在设置页关闭。
-- **无密钥部署**：CLIProxyAPI 未开启鉴权时 API 密钥可留空。
+## Usage
 
-## 使用方式
-
-安装插件：
+Install the plugin:
 
 ```powershell
 npx @deepseek-ai/dsh plugin --profile web add github:router-for-me/dsh-cliproxyapi-provider
 ```
 
-启动或重启 DeepSeek Harness Web：
+Start or restart DeepSeek Harness Web:
 
 ```powershell
 npx @deepseek-ai/dsh web
 ```
 
-打开 Harness 后：
+After opening Harness:
 
-1. 进入 **设置**，在左侧导航中选择 **CLIProxyAPI**。
-2. 填写 CLIProxyAPI 的 **API 地址**，例如
-   `http://127.0.0.1:8317/v1`。
-3. 填写 **API 密钥**；无鉴权服务可以留空。
-4. 按需选择 **速度**（标准 / Fast）与 **服务端联网搜索** 开关。
-5. 保存配置，模型列表会自动获取并定期刷新。
+1. Open **Settings** and choose **CLIProxyAPI** in the left navigation.
+2. Enter the CLIProxyAPI **API URL**, for example
+   `http://127.0.0.1:8317/v1`.
+3. Enter the **API key**. Leave it empty if the service does not require authentication.
+4. Choose **Speed** (Standard / Fast) and the **server-side web search** toggle as needed.
+5. Save the configuration. The model list is retrieved automatically and refreshed periodically.
 
-对支持 Fast 的模型，也可以直接在会话输入框的模型选择器中切换 **速度**；该选择对所有会话生效。
+For Fast-capable models you can also switch **Speed** directly from the model picker in the composer; the choice applies to all sessions.
 
-## 升级说明
+## Upgrade notes
 
-早期版本通过内置 `llm-pi-ai` 插件的供应商配置（`llm-pi-ai.providers.CLIProxyAPI`）工作。当前版本由本插件直接持有 `CLIProxyAPI` 路由：升级后首次启动时会自动迁移旧配置中的 API 地址并移除旧的 `llm-pi-ai` 配置项，无需手工操作。
+Earlier versions worked through a provider profile of the built-in `llm-pi-ai` plugin (`llm-pi-ai.providers.CLIProxyAPI`). The current version owns the `CLIProxyAPI` route itself: on first start after the upgrade it automatically migrates the API URL out of the old profile and removes that entry — no manual steps needed.
 
-卸载插件：
+Uninstall the plugin:
 
 ```powershell
 npx @deepseek-ai/dsh plugin --profile web remove @router-for-me/dsh-cliproxyapi-provider
 ```
 
-卸载后重启 DeepSeek Harness Web 即可。
+Restart DeepSeek Harness Web after uninstalling the plugin.
