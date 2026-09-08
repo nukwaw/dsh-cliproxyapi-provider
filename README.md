@@ -8,7 +8,7 @@ The plugin automatically retrieves the model list from CLIProxyAPI, so models do
 
 - **Automatic model sync**: reads the catalog from CLIProxyAPI's Codex catalog endpoint (context windows, thinking levels) and refreshes it periodically.
 - **Model filtering**: **Fetch model list** on the settings page opens the fetched catalog in a modal where models can be checked individually; only checked models appear in the model picker. With no selection saved, the whole catalog is served.
-- **Fast mode**: models whose catalog entries advertise priority service tiers (`service_tiers`) — the GPT family — offer a **Speed: Standard / Fast** choice right in the model picker, and a speed chip at the bottom of the composer shows the current state (click to toggle). Fast dispatches requests with `service_tier: "priority"`.
+- **Fast mode**: models whose catalog entries advertise priority service tiers (`service_tiers`) — the GPT family — can be dispatched on the priority tier. A speed chip at the bottom of the composer shows the current state for Fast-capable selections (click to toggle); the default lives on the settings page. Fast dispatches requests with `service_tier: "priority"`.
 - **Server-side web search**: for models flagged `supports_search_tool` in the catalog, requests carry the built-in `web_search` tool and CLIProxyAPI performs the search upstream — no extra search API key needed. Can be turned off on the settings page.
 - **Keyless deployments**: the API key can be left empty when CLIProxyAPI has no authentication.
 
@@ -36,7 +36,7 @@ After opening Harness:
 5. Optionally click **Fetch model list** and uncheck models you do not need; with no selection saved, all catalog models are served.
 6. Save the configuration. The model list is retrieved automatically and refreshed periodically.
 
-For Fast-capable models you can also switch **Speed** directly from the model picker in the composer or from the speed chip next to it; the choice applies to all sessions.
+For Fast-capable models you can flip **Speed** anytime from the composer speed chip; the choice applies to all sessions. Set `CPA_DEBUG=1` on the `dsh web` process to log the dispatched model and reasoning effort of every request for debugging.
 
 ## Upgrade notes
 

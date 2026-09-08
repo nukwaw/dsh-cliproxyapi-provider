@@ -31,7 +31,6 @@ window.__ModuleLoader__.load({
     const SETTINGS_SECTION_ID = 'cliproxyapi'
     const SETTINGS_SECTION_ORDER = 20
     const SETTINGS_LOCALE_NS = 'settings.cliProxyApi'
-    const MODEL_SLOT = 'conversation.input.model'
     // The runner gates activation on this declaration: apply only runs once
     // every listed service exists, which is what makes the directory and
     // session lookups below race-free (dynamic plugins have no ctx.inject).
@@ -48,7 +47,6 @@ window.__ModuleLoader__.load({
       'remote.settings',
       'settingsScope',
       'modelDirectories',
-      'sessions',
     ]
 
     // Fast mode is a predefined property of the served family (gpt-* models);
@@ -88,18 +86,7 @@ window.__ModuleLoader__.load({
         baseRequired: 'Base URL is required.',
         baseInvalid: 'Base URL must be a valid HTTP or HTTPS URL.',
         noModels: 'CLIProxyAPI returned no usable models.',
-        modelLabel: 'Model',
-        modelMenuAria: 'Model menu',
         modelsLoading: 'Loading models…',
-        modelsEmpty: 'No models available',
-        modelFailed: 'Failed to load models: {value}',
-        modelRetry: 'Retry',
-        groupFailed: '{name}: {value}',
-        effortLabel: 'Thinking effort',
-        effortsEmpty: 'No thinking levels available',
-        providerDefault: 'Provider default',
-        selectModel: 'Select model',
-        speedTitle: 'Speed',
         speedIndicator: 'Speed: {value} (click to toggle)',
         modelsLabel: 'Models',
         modelsAll: 'All catalog models',
@@ -143,18 +130,7 @@ window.__ModuleLoader__.load({
         baseRequired: '请填写 Base URL。',
         baseInvalid: 'Base URL 必须是有效的 HTTP 或 HTTPS 地址。',
         noModels: 'CLIProxyAPI 未返回可用模型。',
-        modelLabel: '模型',
-        modelMenuAria: '模型菜单',
         modelsLoading: '正在加载模型…',
-        modelsEmpty: '暂无可用模型',
-        modelFailed: '模型加载失败：{value}',
-        modelRetry: '重试',
-        groupFailed: '{name}：{value}',
-        effortLabel: '思考强度',
-        effortsEmpty: '没有可用的思考档位',
-        providerDefault: '供应商默认',
-        selectModel: '选择模型',
-        speedTitle: '速度',
         speedIndicator: '速度：{value}（点击切换）',
         modelsLabel: '模型',
         modelsAll: '全部目录模型',
@@ -170,8 +146,6 @@ window.__ModuleLoader__.load({
     }
 
     const STYLE = `
-.cpaModelSelect{position:relative;min-width:0}.cpaModelSelectTrigger{display:flex;align-items:center;gap:4px;min-width:0;max-width:min(360px,45cqw);height:28px;padding:0 4px 0 8px;border:0;border-radius:24px;outline:0;background:transparent;color:var(--dsw-alias-label-secondary);font-size:13px;font-weight:500;line-height:20px;cursor:pointer}.cpaModelSelectTrigger:hover:not(:disabled),.cpaModelSelectTrigger[aria-expanded=true]{background:var(--dsw-alias-interactive-bg-hover)}.cpaModelSelectTrigger:focus-visible{box-shadow:0 0 0 2px var(--dsw-alias-border-l3)}.cpaModelSelectTrigger:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.cpaModelSelectBolt{flex:none;font-size:11px;line-height:1;color:var(--dsw-alias-label-primary)}.cpaModelSelectLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectEffort{flex:none;color:var(--dsw-alias-label-caption)}.cpaModelSelectChevron{flex:none;color:var(--dsw-alias-label-caption);transition:transform 120ms;font-size:10px}.cpaModelSelectTrigger[aria-expanded=true] .cpaModelSelectChevron{transform:rotate(180deg)}
-.cpaModelSelectMenu,.cpaModelSelectSubmenu{position:absolute;z-index:30;box-sizing:border-box;width:max-content;min-width:min(240px,calc(100vw - 32px));max-width:min(420px,calc(100vw - 32px));max-height:min(360px,calc(100vh - 96px));padding:4px;border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;background:var(--dsw-specific-menu);box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);overflow:hidden}.cpaModelSelectMenu{right:0;bottom:calc(100% + 8px);overflow:visible}.cpaModelSelectSubmenu{right:calc(100% + 8px);bottom:0;min-width:min(230px,calc(100vw - 32px))}.cpaModelSelectCell{display:flex;align-items:center;gap:8px;width:100%;min-width:100%;height:40px;box-sizing:border-box;padding:0 10px;border:0;border-radius:10px;background:transparent;color:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}.cpaModelSelectCell:hover,.cpaModelSelectCell:focus-visible,.cpaModelSelectCell[data-open=true]{background:var(--dsw-alias-interactive-bg-hover);outline:0}.cpaModelSelectCell:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.cpaModelSelectCellLabel{flex:none;white-space:nowrap}.cpaModelSelectCellValue{flex:auto;min-width:0;overflow:hidden;color:var(--dsw-alias-label-tertiary);text-align:right;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectCellChevron{flex:none;color:var(--dsw-alias-label-tertiary);font-size:10px}.cpaModelSelectGroups{min-height:0;max-height:352px;overflow-y:auto}.cpaModelSelectGroup+.cpaModelSelectGroup{margin-top:4px}.cpaModelSelectGroupTitle{position:sticky;top:0;z-index:1;padding:5px 8px 3px;background:var(--dsw-specific-menu);color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:500;line-height:18px}.cpaModelSelectOption{display:flex;align-items:center;gap:8px;width:100%;min-width:100%;min-height:38px;box-sizing:border-box;padding:6px 8px;border:0;border-radius:10px;outline:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.cpaModelSelectOption:hover:not(:disabled),.cpaModelSelectOption:focus-visible{background:var(--dsw-alias-interactive-bg-hover)}.cpaModelSelectOption:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}.cpaModelSelectOptionCopy{display:flex;flex:1;min-width:0;flex-direction:column}.cpaModelSelectOptionName{overflow:hidden;color:inherit;font-size:14px;font-weight:500;line-height:20px;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectOptionDescription{overflow:hidden;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-overflow:ellipsis;white-space:nowrap}.cpaModelSelectCheck{display:grid;place-items:center;flex:0 0 18px;color:var(--dsw-alias-label-primary);font-size:12px}.cpaModelSelectStatus,.cpaModelSelectEmpty{padding:10px;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px}.cpaModelSelectError,.cpaModelSelectWarning{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px;padding:7px 8px;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px}.cpaModelSelectWarning{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-state-warn-label)}.cpaModelSelectRetry{flex:none;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer}
 .cpaSpeedChip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border:1px solid var(--dsw-alias-border-l4);border-radius:12px;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:500;line-height:1;cursor:pointer}.cpaSpeedChip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.cpaSpeedChip[data-fast=true]{color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l3);background:var(--dsw-alias-interactive-bg-hover)}.cpaSpeedChip:disabled{cursor:default;opacity:.5}
 .cpaModalOverlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.32)}
 .cpaModal{box-sizing:border-box;width:min(520px,calc(100vw - 48px));max-height:min(480px,calc(100vh - 96px));display:flex;flex-direction:column;gap:8px;padding:16px;border-radius:12px;background:var(--dsw-specific-menu,#fff);box-shadow:var(--dsw-shadow-lv3,0 8px 32px rgba(0,0,0,.18));color:var(--dsw-alias-label-primary,#1f2329)}
@@ -698,240 +672,6 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The conversation model picker, shadowing the built-in one (a later,
-     * lower-priority registration wins the seat) so CLIProxyAPI's Speed
-     * preference can sit beside Model and Thinking effort for gpt-* routes.
-     */
-    function CliProxyModelSelect({ locked, available, directory, load, select, preference, t }) {
-      const state = useSyncExternalStore(directory.subscribe, directory.getSnapshot)
-      const preferenceSnapshot = usePreferenceSnapshot(preference)
-      const [open, setOpen] = useState(false)
-      const [pane, setPane] = useState('root')
-      const rootRef = useRef(null)
-      const triggerRef = useRef(null)
-      const id = useId()
-      const choices = useMemo(() => state.groups.flatMap((group) => group.models.map((model) => ({
-        group,
-        model,
-        selection: {
-          provider: group.id,
-          model: model.id,
-          ...(model.reasoning?.defaultEffort === undefined ? {} : { reasoningEffort: model.reasoning.defaultEffort }),
-        },
-      }))), [state.groups])
-      const currentChoice = choices.find((choice) => choice.selection.provider === state.current?.provider && choice.selection.model === state.current?.model)
-      const reasoning = currentChoice?.model.reasoning
-      const effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort
-      const effortLabel = reasoning === undefined
-        ? undefined
-        : effectiveEffort === undefined
-          ? t('providerDefault')
-          : reasoning.efforts.find((level) => level.id === effectiveEffort)?.name ?? effectiveEffort
-      const effortChoices = useMemo(() => reasoning === undefined ? [] : [
-        ...(reasoning.defaultEffort === undefined ? [{ key: 'provider-default', effort: undefined, label: t('providerDefault') }] : []),
-        ...reasoning.efforts.map((effort) => ({
-          key: `effort:${effort.id}`,
-          effort: effort.id,
-          label: effort.name,
-          ...(effort.description === undefined ? {} : { description: effort.description }),
-        })),
-      ], [reasoning, t])
-      const modelLabel = currentChoice?.model.name ?? t('selectModel')
-      const speedSupported = state.current?.provider === PROVIDER && supportsFastMode(state.current?.model)
-      const speedWritable = preferenceSnapshot.status === 'ready' && preferenceSnapshot.writable === true
-      const fast = speedSupported && preferenceSnapshot.speedMode === SPEED_MODE_FAST
-      const busy = state.status === 'selecting'
-
-      useEffect(() => {
-        if (available) load()
-      }, [available, load])
-      useEffect(() => {
-        if (!open) return undefined
-        const closeOutside = (event) => {
-          if (!rootRef.current?.contains(event.target)) {
-            setOpen(false)
-            setPane('root')
-          }
-        }
-        document.addEventListener('mousedown', closeOutside)
-        return () => document.removeEventListener('mousedown', closeOutside)
-      }, [open])
-      useEffect(() => {
-        if (!speedSupported && pane === 'speed') setPane('root')
-      }, [pane, speedSupported])
-      if (!available) return null
-
-      const close = (restoreFocus = false) => {
-        setOpen(false)
-        setPane('root')
-        if (restoreFocus) queueMicrotask(() => triggerRef.current?.focus())
-      }
-      const settleSelection = (accepted) => {
-        if (accepted) close(true)
-      }
-      const chooseModel = (selection) => {
-        if (state.current?.provider === selection.provider && state.current.model === selection.model) {
-          close(true)
-          return
-        }
-        void select(selection).then(settleSelection)
-      }
-      const chooseEffort = (effort) => {
-        if (state.current === null) return
-        if (effectiveEffort === effort) {
-          close(true)
-          return
-        }
-        void select({
-          provider: state.current.provider,
-          model: state.current.model,
-          ...(effort === undefined ? {} : { reasoningEffort: effort }),
-        }).then(settleSelection)
-      }
-      const chooseSpeed = (speedMode) => {
-        close(true)
-        void preference.set({ [SPEED_MODE_FIELD]: speedMode })
-      }
-      const option = ({ key, label, description, selected, disabled, onClick }) => React.createElement(
-        'button',
-        {
-          key,
-          type: 'button',
-          role: 'menuitemradio',
-          'aria-checked': selected,
-          className: 'cpaModelSelectOption',
-          disabled,
-          onClick,
-        },
-        React.createElement(
-          'span',
-          { className: 'cpaModelSelectOptionCopy' },
-          React.createElement('span', { className: 'cpaModelSelectOptionName' }, label),
-          description === undefined ? null : React.createElement('span', { className: 'cpaModelSelectOptionDescription' }, description),
-        ),
-        React.createElement('span', { className: 'cpaModelSelectCheck' }, selected ? '✓' : null),
-      )
-      const cell = (target, label, value) => React.createElement(
-        'button',
-        {
-          type: 'button',
-          role: 'menuitem',
-          className: 'cpaModelSelectCell',
-          'data-open': pane === target,
-          'aria-haspopup': 'menu',
-          'aria-expanded': pane === target,
-          onClick: () => setPane((current) => current === target ? 'root' : target),
-        },
-        React.createElement('span', { className: 'cpaModelSelectCellLabel' }, label),
-        React.createElement('span', { className: 'cpaModelSelectCellValue' }, value),
-        React.createElement('span', { className: 'cpaModelSelectCellChevron' }, '▸'),
-      )
-
-      let submenu = null
-      if (pane === 'model') {
-        submenu = React.createElement(
-          'div',
-          { className: 'cpaModelSelectSubmenu', role: 'menu', 'aria-label': t('modelLabel') },
-          state.status === 'loading' ? React.createElement('div', { className: 'cpaModelSelectStatus' }, t('modelsLoading')) : null,
-          state.error === null ? null : React.createElement(
-            'div',
-            { className: 'cpaModelSelectError' },
-            React.createElement('span', null, fill(t('modelFailed'), { value: state.error })),
-            React.createElement('button', { className: 'cpaModelSelectRetry', type: 'button', onClick: load }, t('modelRetry')),
-          ),
-          state.failures.map((failure) => React.createElement('div', { className: 'cpaModelSelectWarning', key: failure.id }, fill(t('groupFailed'), { name: failure.name, value: failure.message }))),
-          React.createElement(
-            'div',
-            { className: 'cpaModelSelectGroups scrollable' },
-            state.groups.map((group) => React.createElement(
-              'section',
-              { className: 'cpaModelSelectGroup', role: 'group', 'aria-labelledby': `${id}-${group.id}`, key: group.id },
-              React.createElement('div', { className: 'cpaModelSelectGroupTitle', id: `${id}-${group.id}` }, group.name),
-              group.models.map((model) => option({
-                key: model.id,
-                label: model.name,
-                description: model.description,
-                selected: state.current?.provider === group.id && state.current.model === model.id,
-                disabled: busy,
-                onClick: () => chooseModel({ provider: group.id, model: model.id }),
-              })),
-            )),
-          ),
-          state.status === 'ready' && choices.length === 0 ? React.createElement('div', { className: 'cpaModelSelectEmpty' }, t('modelsEmpty')) : null,
-        )
-      } else if (pane === 'effort') {
-        submenu = React.createElement(
-          'div',
-          { className: 'cpaModelSelectSubmenu', role: 'menu', 'aria-label': t('effortLabel') },
-          effortChoices.length === 0
-            ? React.createElement('div', { className: 'cpaModelSelectEmpty' }, t('effortsEmpty'))
-            : effortChoices.map((level) => option({
-              key: level.key,
-              label: level.label,
-              description: level.description,
-              selected: effectiveEffort === level.effort,
-              disabled: busy,
-              onClick: () => chooseEffort(level.effort),
-            })),
-        )
-      } else if (pane === 'speed') {
-        submenu = React.createElement(
-          'div',
-          { className: 'cpaModelSelectSubmenu', role: 'menu', 'aria-label': t('speedTitle') },
-          option({ key: SPEED_MODE_STANDARD, label: t('speedStandard'), description: t('speedStandardHint'), selected: !fast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_STANDARD) }),
-          option({ key: SPEED_MODE_FAST, label: t('speedFast'), description: t('speedFastHint'), selected: fast, disabled: !speedWritable, onClick: () => chooseSpeed(SPEED_MODE_FAST) }),
-        )
-      }
-
-      return React.createElement(
-        'div',
-        {
-          className: 'cpaModelSelect',
-          ref: rootRef,
-          onKeyDown: (event) => {
-            if (event.key !== 'Escape' || !open) return
-            event.preventDefault()
-            if (pane === 'root') close(true)
-            else setPane('root')
-          },
-        },
-        React.createElement(
-          'button',
-          {
-            ref: triggerRef,
-            type: 'button',
-            className: 'cpaModelSelectTrigger',
-            'aria-label': modelLabel,
-            'aria-haspopup': 'menu',
-            'aria-expanded': open,
-            'aria-controls': open ? `${id}-menu` : undefined,
-            title: modelLabel,
-            disabled: locked,
-            onClick: () => open ? close() : (setPane('root'), setOpen(true), load()),
-          },
-          fast ? React.createElement('span', { className: 'cpaModelSelectBolt', 'aria-hidden': 'true' }, '⚡') : null,
-          React.createElement('span', { className: 'cpaModelSelectLabel' }, modelLabel),
-          effortLabel === undefined ? null : React.createElement('span', { className: 'cpaModelSelectEffort' }, effortLabel),
-          React.createElement('span', { className: 'cpaModelSelectChevron' }, '▾'),
-        ),
-        open ? React.createElement(
-          'div',
-          {
-            className: 'cpaModelSelectMenu',
-            id: `${id}-menu`,
-            role: 'menu',
-            'aria-label': t('modelMenuAria'),
-            'aria-busy': state.status === 'loading' || busy,
-          },
-          cell('model', t('modelLabel'), modelLabel),
-          reasoning === undefined ? null : cell('effort', t('effortLabel'), effortLabel),
-          speedSupported ? cell('speed', t('speedTitle'), t(fast ? 'speedFast' : 'speedStandard')) : null,
-          submenu,
-        ) : null,
-      )
-    }
-
-    /**
      * Composer-side speed state: a chip beside the composer actions, rendered
      * whenever the selected model is a Fast-capable CLIProxyAPI route. Clicking
      * toggles the global speedMode preference directly.
@@ -1120,38 +860,15 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function installModelPicker(ctx, preference, t) {
+    function installSpeedChip(ctx, preference, t) {
       // Activation is gated on the inject declaration above, so both services
-      // are guaranteed present by the time apply runs.
+      // are guaranteed present by the time apply runs. The built-in model
+      // picker stays in place — only the speed state chip is added.
       const modelDirectories = ctx.get('modelDirectories')
-      const sessions = ctx.get('sessions')
       console.info('[dsh-cliproxyapi] composer slots install', {
         modelDirectories: modelDirectories !== undefined,
-        sessions: sessions !== undefined,
       })
       if (modelDirectories === undefined) return
-      ctx.slots.inject(MODEL_SLOT, () => ctx.slots.register({
-        name: MODEL_SLOT,
-        // Dynamic registrations are auto-assigned a shadowing priority below
-        // any shipped entry, which is what wins this single seat.
-        priority: -10,
-        locale: SETTINGS_LOCALE_NS,
-        inject: (sessionId) => {
-          const directory = modelDirectories.directoryFor(sessionId)
-          const available = sessions?.subagentAddress(sessionId) === undefined
-          return {
-            available,
-            directory: directory.store,
-            load: () => {
-              if (available) void directory.load()
-            },
-            select: (selection) => available
-              ? directory.select(selection).then(() => true, () => false)
-              : Promise.resolve(false),
-            preference,
-          }
-        },
-      }, CliProxyModelSelect))
       // The composer-side speed state chip, rendered only for Fast-capable
       // CLIProxyAPI selections.
       ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
@@ -1197,7 +914,7 @@ window.__ModuleLoader__.load({
         inject: () => ({ operations, remote, preference, t }),
       }, SettingsSection))
 
-      installModelPicker(ctx, preference, t)
+      installSpeedChip(ctx, preference, t)
     }
 
     exports.apply = apply
@@ -1206,7 +923,6 @@ window.__ModuleLoader__.load({
     exports.removeConfiguration = removeConfiguration
     exports.supportsFastMode = supportsFastMode
     exports.createPreference = createPreference
-    exports.modelSelect = CliProxyModelSelect
     exports.settingsSection = SettingsSection
     return module.exports
   },

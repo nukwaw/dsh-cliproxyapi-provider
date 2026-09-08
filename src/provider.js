@@ -96,8 +96,16 @@ export function withPreferences(model, options, resolvePreferences) {
  */
 export function createCliProxyApiProvider({ id, name, baseURL, models, resolvePreferences }) {
   const streams = openAIResponsesApi()
-  const wrap = (dispatch) => (model, context, options) =>
-    dispatch(model, context, withPreferences(model, options, resolvePreferences))
+  const wrap = (dispatch) => (model, context, options) => {
+    if (process.env.CPA_DEBUG) {
+      console.info('[dsh-cliproxyapi] dispatch', JSON.stringify({
+        model: model?.id,
+        reasoningEffort: options?.reasoningEffort ?? null,
+        hasOnPayload: typeof options?.onPayload === 'function',
+      }))
+    }
+    return dispatch(model, context, withPreferences(model, options, resolvePreferences))
+  }
   return Object.freeze({
     id,
     name,

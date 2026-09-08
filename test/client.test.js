@@ -34,7 +34,6 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
     'remote.settings',
     'settingsScope',
     'modelDirectories',
-    'sessions',
   ])
 
   const registrations = []
@@ -105,7 +104,7 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
   assert.equal(typeof registrations[0].component, 'function')
 })
 
-test('client shadows the model picker when directory services are present', async () => {
+test('client adds only the speed chip when directory services are present', async () => {
   const plugin = await loadClientPlugin()
   const registrations = []
   const slots = {
@@ -152,22 +151,14 @@ test('client shadows the model picker when directory services are present', asyn
   }
   plugin.apply(ctx)
   assert.ok(plugin.inject.includes('modelDirectories'))
-  assert.ok(plugin.inject.includes('sessions'))
-  const picker = registrations.find((entry) => entry.options.name === 'conversation.input.model')
-  assert.ok(picker)
-  assert.equal(picker.options.priority, -10)
-  assert.equal(picker.options.locale, 'settings.cliProxyApi')
-  const injected = picker.options.inject('session-1')
-  assert.equal(injected.available, true)
-  assert.equal(injected.directory, directory.store)
-  assert.equal(typeof injected.load, 'function')
-  assert.equal(typeof injected.select, 'function')
-  assert.equal(typeof injected.preference.set, 'function')
+  // The built-in picker keeps its seat; only the speed chip is added.
+  assert.equal(registrations.some((entry) => entry.options.name === 'conversation.input.model'), false)
   const chip = registrations.find((entry) => entry.options.name === 'conversation.input.right')
   assert.ok(chip)
   assert.equal(chip.options.id, 'cliproxyapi-speed')
   const chipProps = chip.options.inject('session-1')
   assert.equal(chipProps.directory, directory.store)
+  assert.equal(typeof chipProps.preference.set, 'function')
 })
 
 test('client owns only its Settings section and keeps the configuration accessible', async () => {
@@ -176,8 +167,8 @@ test('client owns only its Settings section and keeps the configuration accessib
   assert.doesNotMatch(source, /MutationObserver/)
   assert.doesNotMatch(source, /querySelector(All)?\s*\(/)
   assert.match(source, /settings\.section/)
-  assert.match(source, /conversation\.input\.model/)
-  assert.match(source, /priority: -10/)
+  assert.match(source, /conversation\.input\.right/)
+  assert.doesNotMatch(source, /conversation\.input\.model/)
   assert.doesNotMatch(source, /settings\.plugins\.tab/)
   assert.match(source, /ctx\.settingsScope/)
   assert.match(source, /slots\.inject\(SETTINGS_SLOT/)
