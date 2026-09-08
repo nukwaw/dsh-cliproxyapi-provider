@@ -1121,6 +1121,10 @@ window.__ModuleLoader__.load({
       // are guaranteed present by the time apply runs.
       const modelDirectories = ctx.get('modelDirectories')
       const sessions = ctx.get('sessions')
+      console.info('[dsh-cliproxyapi] composer slots install', {
+        modelDirectories: modelDirectories !== undefined,
+        sessions: sessions !== undefined,
+      })
       if (modelDirectories === undefined) return
       ctx.slots.inject(MODEL_SLOT, () => ctx.slots.register({
         name: MODEL_SLOT,
