@@ -1,6 +1,6 @@
 {
   "name": "@router-for-me/dsh-cliproxyapi-provider",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "GUI-configurable CLIProxyAPI Responses provider for DeepSeek Harness, with Fast mode and server-side web search",
   "type": "module",
   "main": "./src/index.js",
@@ -12,14 +12,21 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
-  "files": ["src", "client.js", "cordis.patch.yml", "README.md"],
+  "files": [
+    "src",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test",
     "check": "node --check src/index.js && node --check src/catalog.js && node --check src/provider.js && node --check src/settings-contract.js && node --check client.js && node --test",
     "pack:github": "npm pack"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-ui-settings",
@@ -51,7 +58,9 @@
     "@earendil-works/pi-ai": "^0.85.1",
     "react": "^18.2.0"
   },
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "license": "MIT",
   "private": true
 }

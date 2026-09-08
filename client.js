@@ -1112,43 +1112,47 @@ window.__ModuleLoader__.load({
     }
 
     function installModelPicker(ctx, preference, t) {
-      const sessions = ctx.get('sessions')
-      const modelDirectories = ctx.get('modelDirectories')
-      if (sessions === undefined || modelDirectories === undefined) return
-      ctx.slots.inject(MODEL_SLOT, () => ctx.slots.register({
-        name: MODEL_SLOT,
-        // A later registration shadows the built-in picker on this seat.
-        priority: -10,
-        locale: SETTINGS_LOCALE_NS,
-        inject: (sessionId) => {
-          const directory = modelDirectories.directoryFor(sessionId)
-          const available = sessions.subagentAddress(sessionId) === undefined
-          return {
-            available,
-            directory: directory.store,
-            load: () => {
-              if (available) void directory.load()
-            },
-            select: (selection) => available
-              ? directory.select(selection).then(() => true, () => false)
-              : Promise.resolve(false),
+      // Wait for the directory service instead of probing once at apply time:
+      // client plugin order is not guaranteed, and a one-shot get() that fires
+      // before ui-model-selection registers its service would silently skip
+      // the shadowing and leave the built-in picker in place.
+      ctx.inject(['slots', 'modelDirectories'], (scope) => {
+        const modelDirectories = scope.modelDirectories
+        scope.slots.inject(MODEL_SLOT, () => scope.slots.register({
+          name: MODEL_SLOT,
+          // A later registration shadows the built-in picker on this seat.
+          priority: -10,
+          locale: SETTINGS_LOCALE_NS,
+          inject: (sessionId) => {
+            const directory = modelDirectories.directoryFor(sessionId)
+            const available = scope.get('sessions')?.subagentAddress(sessionId) === undefined
+            return {
+              available,
+              directory: directory.store,
+              load: () => {
+                if (available) void directory.load()
+              },
+              select: (selection) => available
+                ? directory.select(selection).then(() => true, () => false)
+                : Promise.resolve(false),
+              preference,
+            }
+          },
+        }, CliProxyModelSelect))
+        // The composer-side speed state chip, rendered only for Fast-capable
+        // CLIProxyAPI selections.
+        scope.slots.inject('conversation.input.right', () => scope.slots.register({
+          name: 'conversation.input.right',
+          id: 'cliproxyapi-speed',
+          order: 15,
+          locale: SETTINGS_LOCALE_NS,
+          inject: (sessionId) => ({
+            directory: modelDirectories.directoryFor(sessionId).store,
             preference,
-          }
-        },
-      }, CliProxyModelSelect))
-      // The composer-side speed state chip, rendered only for Fast-capable
-      // CLIProxyAPI selections.
-      ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
-        name: 'conversation.input.right',
-        id: 'cliproxyapi-speed',
-        order: 15,
-        locale: SETTINGS_LOCALE_NS,
-        inject: (sessionId) => ({
-          directory: modelDirectories.directoryFor(sessionId).store,
-          preference,
-          t,
-        }),
-      }, SpeedIndicator))
+            t,
+          }),
+        }, SpeedIndicator))
+      })
     }
 
     function apply(ctx) {
@@ -1181,8 +1185,7 @@ window.__ModuleLoader__.load({
         inject: () => ({ operations, remote, preference, t }),
       }, SettingsSection))
 
-      if (ctx.get('remote.session') === undefined) installModelPicker(ctx, preference, t)
-      else ctx.inject(['remote.session'], (scoped) => installModelPicker(scoped, preference, t))
+      installModelPicker(ctx, preference, t)
     }
 
     exports.apply = apply

@@ -72,12 +72,18 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
     },
   }
   const effects = []
+  const deferred = []
   const ctx = {
     remote: { $on() { return () => {} } },
     slots,
     locale,
     settingsScope,
-    // No sessions/modelDirectories services: the picker install must abstain.
+    // The modelDirectories service never arrives in this mock: the picker
+    // install must stay deferred instead of registering anything.
+    inject(deps, callback) {
+      deferred.push(deps)
+      return () => {}
+    },
     get() { return undefined },
     effect(factory) {
       effects.push(factory)
@@ -89,6 +95,7 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
   // invoked by this mock (no DOM in Node).
   assert.equal(effects.length, 2)
   assert.deepEqual(injections, ['settings.section'])
+  assert.deepEqual(deferred, [['slots', 'modelDirectories']])
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].options.name, 'settings.section')
   assert.equal(registrations[0].options.id, 'cliproxyapi')
@@ -124,6 +131,7 @@ test('client shadows the model picker when directory services are present', asyn
     load() { return Promise.resolve() },
     select() { return Promise.resolve() },
   }
+  const injectedDeps = []
   const ctx = {
     remote: { $on() { return () => {} } },
     slots,
@@ -132,16 +140,26 @@ test('client shadows the model picker when directory services are present', asyn
       bind() { return (key) => key },
     },
     settingsScope: { bind() { return scope } },
-    get(name) {
-      if (name === 'sessions') return { subagentAddress: () => undefined }
-      if (name === 'modelDirectories') return { directoryFor: () => directory }
-      return undefined
+    // The deferred install fires once the directory service is injected.
+    inject(deps, callback) {
+      injectedDeps.push(deps)
+      callback({
+        slots,
+        modelDirectories: { directoryFor: () => directory },
+        get(name) {
+          if (name === 'sessions') return { subagentAddress: () => undefined }
+          return undefined
+        },
+      })
+      return () => {}
     },
+    get() { return undefined },
     effect() {
       return () => {}
     },
   }
   plugin.apply(ctx)
+  assert.deepEqual(injectedDeps, [['slots', 'modelDirectories']])
   const picker = registrations.find((entry) => entry.options.name === 'conversation.input.model')
   assert.ok(picker)
   assert.equal(picker.options.priority, -10)
@@ -152,6 +170,11 @@ test('client shadows the model picker when directory services are present', asyn
   assert.equal(typeof injected.load, 'function')
   assert.equal(typeof injected.select, 'function')
   assert.equal(typeof injected.preference.set, 'function')
+  const chip = registrations.find((entry) => entry.options.name === 'conversation.input.right')
+  assert.ok(chip)
+  assert.equal(chip.options.id, 'cliproxyapi-speed')
+  const chipProps = chip.options.inject('session-1')
+  assert.equal(chipProps.directory, directory.store)
 })
 
 test('client owns only its Settings section and keeps the configuration accessible', async () => {
