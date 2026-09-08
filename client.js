@@ -35,12 +35,16 @@ window.__ModuleLoader__.load({
     // The runner gates activation on this declaration: apply only runs once
     // every listed service exists, which is what makes the directory and
     // session lookups below race-free (dynamic plugins have no ctx.inject).
+    // remote.session is declared because cordis checks service access against
+    // the EXECUTING fiber: directoryFor reads ctx.remote.session internally,
+    // and our slot inject callbacks run on this plugin's fiber.
     const inject = [
       'slots',
       'locale',
       'remote',
       'remote.credentials',
       'remote.llm',
+      'remote.session',
       'remote.settings',
       'settingsScope',
       'modelDirectories',

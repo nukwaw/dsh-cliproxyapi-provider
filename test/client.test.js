@@ -30,6 +30,7 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
     'remote',
     'remote.credentials',
     'remote.llm',
+    'remote.session',
     'remote.settings',
     'settingsScope',
     'modelDirectories',
