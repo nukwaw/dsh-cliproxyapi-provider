@@ -40,7 +40,7 @@ For Fast-capable models you can also switch **Speed** directly from the model pi
 
 ## Upgrade notes
 
-Earlier versions worked through a provider profile of the built-in `llm-pi-ai` plugin (`llm-pi-ai.providers.CLIProxyAPI`). The current version owns the `CLIProxyAPI` route itself: on first start after the upgrade it automatically migrates the API URL out of the old profile and removes that entry — no manual steps needed.
+Earlier versions worked through a provider profile of the built-in `llm-pi-ai` plugin (`llm-pi-ai.providers.CLIProxyAPI`). The current version owns the `CLIProxyAPI` route itself and no longer migrates the old profile: if you configured CLIProxyAPI through an older version, open the built-in **pi-ai** settings page, remove its `CLIProxyAPI` provider entry, then configure the connection on this plugin's settings page.
 
 Uninstall the plugin:
 

@@ -3,12 +3,6 @@ import assert from 'node:assert/strict'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { createUserMessage, LlmRuntime } from '@deepseek-ai/dsh-llm'
-import {
-  Config as PiAiConfig,
-  apply as applyPiAi,
-  inject as piAiInject,
-  name as piAiName,
-} from '@deepseek-ai/dsh-llm-pi-ai'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { Config, PLACEHOLDER_AUTHORIZATION, apply } from '../src/index.js'
 
@@ -16,20 +10,6 @@ async function resolvedConfig(overrides = {}) {
   const result = await Config['~standard'].validate(overrides)
   assert.equal(result.issues, undefined)
   return result.value
-}
-
-function legacyProfile(overrides = {}) {
-  return {
-    displayName: 'CLIProxyAPI',
-    api: 'openai-responses',
-    baseURL: 'http://127.0.0.1:8317/v1',
-    models: [{ id: 'old', name: 'old', contextWindow: 1000, maxTokens: 100, input: ['text'] }],
-    defaultContextWindow: 262144,
-    defaultMaxTokens: 32768,
-    defaultInput: ['text'],
-    headers: {},
-    ...overrides,
-  }
 }
 
 const CATALOG_BODY = {
@@ -45,10 +25,8 @@ const CATALOG_BODY = {
   ],
 }
 
-function createHarness({ legacyProfile: legacy } = {}) {
-  const document = {
-    'llm-pi-ai': legacy === undefined ? { providers: {} } : { providers: { CLIProxyAPI: legacy } },
-  }
+function createHarness() {
+  const document = {}
 
   const requests = []
   const previousFetch = globalThis.fetch
@@ -85,7 +63,7 @@ async function waitFor(predicate, timeoutMs = 2000) {
 }
 
 async function startStack({ document, credential, pluginConfig } = {}) {
-  const harness = createHarness({ legacyProfile: document?.['llm-pi-ai']?.providers?.CLIProxyAPI, credential })
+  const harness = createHarness()
   if (document !== undefined) harness.document = document
 
   class MemorySettings extends SettingsProvider {
@@ -151,37 +129,6 @@ test('stays dormant until a baseURL is configured, then owns the route', async (
     const catalogRequest = harness.requests.find((request) => request.url.includes('/models?'))
     assert.equal(catalogRequest.authorization, null)
   } finally {
-    await stack.dispose()
-  }
-})
-
-// The legacy namespace is only readable once llm-pi-ai registers it, so every
-// migration scenario runs with that plugin in the stack — as in real harness
-// installations, where llm-pi-ai is built in.
-test('migrates a legacy llm-pi-ai profile and wins the route it held', async () => {
-  const stack = await startStack({
-    document: {
-      'llm-pi-ai': { providers: { CLIProxyAPI: legacyProfile() } },
-    },
-  })
-  const piFiber = stack.ctx.plugin({
-    name: piAiName,
-    inject: piAiInject,
-    Config: PiAiConfig,
-    apply: applyPiAi,
-  }, { providers: {} })
-  await piFiber.await()
-  try {
-    const { ctx } = stack
-    // llm-pi-ai claims the route from the legacy profile; the migration then
-    // removes it and this plugin must take over once the route is released.
-    await waitFor(() => ctx.settings.get('llm-pi-ai')?.providers?.CLIProxyAPI === undefined)
-    assert.equal(ctx.settings.get('llm-cliproxyapi')?.baseURL, 'http://127.0.0.1:8317/v1')
-    await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
-    const models = await ctx.llm.listModels('CLIProxyAPI')
-    assert.deepEqual(models.map((model) => model.id), ['gpt-5.6-sol', 'kimi-for-coding'])
-  } finally {
-    await piFiber.dispose().catch(() => {})
     await stack.dispose()
   }
 })

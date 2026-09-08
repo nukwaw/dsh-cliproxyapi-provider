@@ -21,7 +21,6 @@ import {
 } from './settings-contract.js'
 
 const MAX_CATALOG_BYTES = 4 * 1024 * 1024
-const LEGACY_PI_NS = 'llm-pi-ai'
 const API_KEY_REF = credentialRef('DSH_CLIPROXY_API_KEY')
 const PROVIDER = 'CLIProxyAPI'
 const NO_MODELS = new Set()
@@ -243,10 +242,9 @@ export function apply(ctx, config) {
     }
   }
   ctx.on('llm/adapters-updated', () => {
-    // A legacy llm-pi-ai profile claims the route as soon as that plugin reads
-    // it; topology changes are the signal that the namespace became readable
-    // or that the route was released after migration.
-    void migrateLegacyProfile()
+    // The route can be held by a legacy llm-pi-ai profile written by old
+    // versions; once the user removes that profile, the released route is
+    // taken over here.
     if (registrationPending) ensureRegistration()
   })
 
@@ -339,38 +337,10 @@ export function apply(ctx, config) {
     }
   }
 
-  // Migrate a profile written by versions that delegated the route to
-  // llm-pi-ai: copy its baseURL into this namespace, then release the route.
-  // The legacy namespace may not be registered yet at boot (plugin order is
-  // not guaranteed), so migration is re-attempted on every topology or legacy
-  // settings change; it is a no-op once no legacy profile remains.
-  let migrating = false
-  const migrateLegacyProfile = async () => {
-    if (migrating) return
-    const legacy = ctx.settings.get(LEGACY_PI_NS)?.providers?.[PROVIDER]
-    if (legacy === undefined) return
-    migrating = true
-    try {
-      if (configuredBaseURL() === undefined) {
-        const baseURL = normalizeBaseURL(legacy.baseURL)
-        if (baseURL !== undefined) await settings.update({ [BASE_URL_FIELD]: baseURL })
-      }
-      await ctx.settings.mutate(LEGACY_PI_NS, [{ op: 'unset', path: ['providers', PROVIDER] }])
-      ctx.logger.info('llm-cliproxyapi: migrated the CLIProxyAPI route off the llm-pi-ai profile')
-    } catch (error) {
-      ctx.logger.warn(`llm-cliproxyapi: legacy profile migration failed: ${error?.message ?? error}`)
-    } finally {
-      migrating = false
-    }
-  }
-
   ctx.effect(() => settings.watch((next, prev) => {
     // Preferences are read per dispatch; only a connection change resyncs.
     if (normalizeBaseURL(next?.[BASE_URL_FIELD]) !== normalizeBaseURL(prev?.[BASE_URL_FIELD])) schedule()
   }), 'llm-cliproxyapi: settings watch')
-  ctx.on('settings/updated', (ns) => {
-    if (ns === LEGACY_PI_NS) void migrateLegacyProfile()
-  })
   ctx.on('credentials/reference-updated', (ref) => {
     if (ref === API_KEY_REF) schedule({ authOnly: true })
   })
@@ -380,5 +350,5 @@ export function apply(ctx, config) {
     activeController?.abort(new Error('CLIProxyAPI provider plugin disposed'))
   })
 
-  void migrateLegacyProfile().finally(() => schedule())
+  schedule()
 }
