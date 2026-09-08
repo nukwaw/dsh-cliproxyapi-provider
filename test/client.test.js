@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { Config as PiAiConfig } from '@deepseek-ai/dsh-llm-pi-ai'
 
 async function loadClientPlugin() {
   let definition
@@ -68,23 +67,27 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
   }
   const settingsScope = {
     bind(spec) {
-      assert.deepEqual(spec, { namespace: 'llm-pi-ai' })
+      assert.deepEqual(spec, { namespace: 'llm-cliproxyapi' })
       return scope
     },
   }
-  let effect
+  const effects = []
   const ctx = {
     remote: { $on() { return () => {} } },
     slots,
     locale,
     settingsScope,
+    // No sessions/modelDirectories services: the picker install must abstain.
+    get() { return undefined },
     effect(factory) {
-      effect = factory
+      effects.push(factory)
       return () => {}
     },
   }
   plugin.apply(ctx)
-  assert.equal(typeof effect, 'function')
+  // Dictionaries + picker style are lifecycle-owned; the factories are not
+  // invoked by this mock (no DOM in Node).
+  assert.equal(effects.length, 2)
   assert.deepEqual(injections, ['settings.section'])
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].options.name, 'settings.section')
@@ -96,176 +99,194 @@ test('client bundle registers a lifecycle-owned settings section', async () => {
   assert.equal(typeof registrations[0].component, 'function')
 })
 
+test('client shadows the model picker when directory services are present', async () => {
+  const plugin = await loadClientPlugin()
+  const registrations = []
+  const slots = {
+    inject(name, callback) {
+      return callback()
+    },
+    register(options, component) {
+      registrations.push({ options, component })
+      return () => {}
+    },
+  }
+  const scope = {
+    getSnapshot() {
+      return { status: 'ready', value: { speedMode: 'fast' }, revision: 3, writable: true }
+    },
+    subscribe() {
+      return () => {}
+    },
+  }
+  const directory = {
+    store: { subscribe() { return () => {} }, getSnapshot() { return { groups: [], current: null, status: 'ready', error: null, failures: [] } } },
+    load() { return Promise.resolve() },
+    select() { return Promise.resolve() },
+  }
+  const ctx = {
+    remote: { $on() { return () => {} } },
+    slots,
+    locale: {
+      register() { return () => {} },
+      bind() { return (key) => key },
+    },
+    settingsScope: { bind() { return scope } },
+    get(name) {
+      if (name === 'sessions') return { subagentAddress: () => undefined }
+      if (name === 'modelDirectories') return { directoryFor: () => directory }
+      return undefined
+    },
+    effect() {
+      return () => {}
+    },
+  }
+  plugin.apply(ctx)
+  const picker = registrations.find((entry) => entry.options.name === 'conversation.input.model')
+  assert.ok(picker)
+  assert.equal(picker.options.priority, -10)
+  assert.equal(picker.options.locale, 'settings.cliProxyApi')
+  const injected = picker.options.inject('session-1')
+  assert.equal(injected.available, true)
+  assert.equal(injected.directory, directory.store)
+  assert.equal(typeof injected.load, 'function')
+  assert.equal(typeof injected.select, 'function')
+  assert.equal(typeof injected.preference.set, 'function')
+})
+
 test('client owns only its Settings section and keeps the configuration accessible', async () => {
   const source = await readFile(new URL('../client.js', import.meta.url), 'utf8')
   assert.doesNotMatch(source, /setInterval\s*\(/)
-  assert.doesNotMatch(source, /document\./)
   assert.doesNotMatch(source, /MutationObserver/)
   assert.doesNotMatch(source, /querySelector(All)?\s*\(/)
-  assert.doesNotMatch(source, /modelsHeading|configuredRows|BOOTSTRAP_ATTRIBUTE|HIDDEN_ATTRIBUTE/)
   assert.match(source, /settings\.section/)
+  assert.match(source, /conversation\.input\.model/)
+  assert.match(source, /priority: -10/)
   assert.doesNotMatch(source, /settings\.plugins\.tab/)
   assert.match(source, /ctx\.settingsScope/)
   assert.match(source, /slots\.inject\(SETTINGS_SLOT/)
   assert.match(source, /expectedRevision/)
   assert.match(source, /scope\.subscribe\(/)
-  assert.doesNotMatch(source, /remote\.\$on\('settings\/document-updated'/)
   assert.match(source, /remote\.\$on\('credentials\/reference-updated'/)
   assert.match(source, /role: 'status'/)
 })
 
-test('initial profile waits until the host writes complete model capabilities', async () => {
+test('configuration validates the draft, stores the key, and writes the namespace', async () => {
   const plugin = await loadClientPlugin()
-  const scopeListeners = []
-  let currentNamespace = {
-    ns: 'llm-pi-ai', revision: 1, value: { providers: {} },
-  }
-  let scopeSnapshot = {
-    status: 'ready', revision: 1, value: {
-      providers: {
-        CLIProxyAPI: {
-          baseURL: 'http://127.0.0.1:8317/v1',
-          headers: { authorization: 'Bearer dsh-cliproxyapi-no-key' },
-        },
-      },
-    }, writable: true,
-  }
-  let bootstrap
   let discoveryNs
   let discoveryRequest
-  let expectedRevision
+  let stored
+  let mutation
   const ok = (value) => ({ ok: true, value })
-  const remote = {
-    settings: {
-      async mutate(ns, ops, revision) {
-        assert.equal(ns, 'llm-pi-ai')
-        expectedRevision = revision
-        bootstrap = ops[0].value
-        currentNamespace = {
-          ns: 'llm-pi-ai', revision: 2, value: { providers: { CLIProxyAPI: bootstrap } },
-        }
-        return ok(currentNamespace)
-      },
-    },
-    credentials: {
-      async describe(refs) {
-        assert.deepEqual(refs, ['DSH_CLIPROXY_API_KEY'])
-        return ok({ DSH_CLIPROXY_API_KEY: { configured: false } })
-      },
-      async set() {
-        return ok(undefined)
-      },
-    },
-    llm: {
-      async discoverModels(settingsNs, request) {
-        discoveryNs = settingsNs
-        discoveryRequest = request
-        return ok([{
-          id: 'gpt-5.6-sol', name: 'GPT 5.6 Sol', contextWindow: 372000, maxTokens: 32768,
-        }])
-      },
-    },
-  }
   const operations = {
-    describeCredential: (ref) => remote.credentials.describe([ref]).then((response) => {
-      if (!response.ok) throw new Error(response.error.message)
-      return response.value[ref]
-    }),
-    storeCredential: (ref, value) => remote.credentials.set(ref, value).then((response) => {
-      if (!response.ok) throw new Error(response.error.message)
-    }),
-    discoverModels: (settingsNs, request) => remote.llm.discoverModels(settingsNs, request).then((response) => {
-      if (!response.ok) throw new Error(response.error.message)
-      return response.value
-    }),
-    mutateSettings: (ns, ops, revision) => remote.settings.mutate(ns, ops, revision).then((response) => {
-      if (!response.ok) throw new Error(response.error.message)
-      return response.value
-    }),
-  }
-  const scope = {
-    getSnapshot() {
-      return scopeSnapshot
+    describeCredential: async (ref) => {
+      assert.equal(ref, 'DSH_CLIPROXY_API_KEY')
+      return { configured: false }
     },
-    subscribe(listener) {
-      scopeListeners.push(listener)
-      return () => scopeListeners.splice(scopeListeners.indexOf(listener), 1)
+    storeCredential: async (ref, value) => {
+      stored = { ref, value }
+    },
+    discoverModels: async (ns, request) => {
+      discoveryNs = ns
+      discoveryRequest = request
+      return [{ id: 'gpt-5.6-sol', name: 'GPT 5.6 Sol' }]
+    },
+    mutateSettings: async (ns, ops) => {
+      mutation = { ns, ops }
+      return ok({ ns, revision: 2 })
     },
   }
-  const messages = {
-    noModels: 'no models',
-    syncTimeout: 'sync timeout',
-  }
-  let settled = false
-  const installing = plugin.installInitialProfile(
-    operations, scope, 'http://127.0.0.1:8317/v1', '', messages,
-  ).then((profile) => {
-    settled = true
-    return profile
-  })
-
-  for (let attempt = 0; !bootstrap && attempt < 100; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  }
-  assert.ok(bootstrap)
-  assert.equal(expectedRevision, 1)
+  const messages = { noModels: 'no models' }
+  const result = await plugin.installConfiguration(
+    operations,
+    'http://127.0.0.1:8317/v1',
+    'sk-new',
+    { speedMode: 'fast', webSearch: false },
+    messages,
+  )
   assert.equal(discoveryNs, 'llm-cliproxyapi')
   assert.equal(discoveryRequest.provider, 'CLIProxyAPI')
   assert.equal(discoveryRequest.baseURL, 'http://127.0.0.1:8317/v1')
-  assert.equal(bootstrap.models[0].input, undefined)
-  assert.equal(bootstrap.models[0].reasoningEfforts, undefined)
-  assert.match(bootstrap.headers['x-dsh-provider-cpa-sync'], /^rich:/)
-  const validated = await PiAiConfig['~standard'].validate({
-    providers: { CLIProxyAPI: bootstrap },
+  assert.equal(discoveryRequest.apiKey, 'sk-new')
+  assert.deepEqual(stored, { ref: 'DSH_CLIPROXY_API_KEY', value: 'sk-new' })
+  assert.deepEqual(mutation, {
+    ns: 'llm-cliproxyapi',
+    ops: [
+      { op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' },
+      { op: 'set', path: ['speedMode'], value: 'fast' },
+      { op: 'set', path: ['webSearch'], value: false },
+    ],
   })
-  assert.equal(validated.issues, undefined)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  assert.equal(settled, false)
-
-  const synchronized = {
-    ...bootstrap,
-    headers: { authorization: 'Bearer dsh-cliproxyapi-no-key' },
-    models: [{
-      id: 'gpt-5.6-sol',
-      name: 'GPT 5.6 Sol',
-      contextWindow: 372000,
-      maxTokens: 32768,
-      input: ['text', 'image'],
-      reasoningEfforts: { low: 'low', high: 'high' },
-    }],
-  }
-  currentNamespace = {
-    ns: 'llm-pi-ai', revision: 3, value: { providers: { CLIProxyAPI: synchronized } },
-  }
-  scopeSnapshot = {
-    status: 'ready', revision: 3, value: currentNamespace.value, writable: true,
-  }
-  for (const listener of [...scopeListeners]) listener()
-
-  const profile = await installing
-  assert.deepEqual(profile.models[0].input, ['text', 'image'])
-  assert.deepEqual(profile.models[0].reasoningEfforts, { low: 'low', high: 'high' })
-  assert.equal(scopeListeners.length, 0)
+  assert.equal(result.discovered.length, 1)
+  assert.equal(result.hasCredential, true)
 })
 
-test('removing the profile unsets the provider section', async () => {
+test('configuration refuses a server without usable models', async () => {
+  const plugin = await loadClientPlugin()
+  let mutated = false
+  await assert.rejects(
+    plugin.installConfiguration({
+      describeCredential: async () => ({ configured: false }),
+      storeCredential: async () => {},
+      discoverModels: async () => [],
+      mutateSettings: async () => {
+        mutated = true
+      },
+    }, 'http://127.0.0.1:8317/v1', '', { speedMode: 'standard', webSearch: true }, { noModels: 'no models' }),
+    /no models/,
+  )
+  assert.equal(mutated, false)
+})
+
+test('removing the configuration unsets the base URL', async () => {
   const plugin = await loadClientPlugin()
   const mutations = []
   const operations = {
-    mutateSettings: async (ns, ops, revision) => {
-      mutations.push({ ns, ops, revision })
-      return { ns, revision: (revision ?? 0) + 1, value: { providers: {} } }
+    mutateSettings: async (ns, ops) => {
+      mutations.push({ ns, ops })
+      return { ns, revision: 8 }
     },
   }
-  const scope = {
-    getSnapshot() {
-      return { status: 'ready', revision: 7, value: { providers: {} }, writable: true }
-    },
-  }
-  await plugin.removeProfile(operations, scope)
+  await plugin.removeConfiguration(operations)
   assert.deepEqual(mutations, [{
-    ns: 'llm-pi-ai',
-    ops: [{ op: 'unset', path: ['providers', 'CLIProxyAPI'] }],
-    revision: 7,
+    ns: 'llm-cliproxyapi',
+    ops: [{ op: 'unset', path: ['baseURL'] }],
+  }])
+})
+
+test('fast mode support follows the predefined gpt family rule', async () => {
+  const plugin = await loadClientPlugin()
+  assert.equal(plugin.supportsFastMode('gpt-5.6-sol'), true)
+  assert.equal(plugin.supportsFastMode('gpt-6-astra'), true)
+  assert.equal(plugin.supportsFastMode('kimi-for-coding'), false)
+  assert.equal(plugin.supportsFastMode(undefined), false)
+})
+
+test('preference snapshots memoize until the section changes', async () => {
+  const plugin = await loadClientPlugin()
+  let snapshot = { status: 'ready', revision: 1, writable: true, value: { baseURL: 'http://x/v1', speedMode: 'fast' } }
+  const scope = {
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+  }
+  const sets = []
+  const preference = plugin.createPreference(scope, {
+    mutateSettings: async (ns, ops, revision) => {
+      sets.push({ ns, ops, revision })
+    },
+  })
+  const first = preference.getSnapshot()
+  assert.equal(preference.getSnapshot(), first)
+  assert.equal(first.speedMode, 'fast')
+  assert.equal(first.webSearch, true)
+  snapshot = { ...snapshot, revision: 2, value: { ...snapshot.value, speedMode: 'standard' } }
+  const second = preference.getSnapshot()
+  assert.notEqual(second, first)
+  assert.equal(second.speedMode, 'standard')
+  await preference.set({ speedMode: 'fast' })
+  assert.deepEqual(sets, [{
+    ns: 'llm-cliproxyapi',
+    ops: [{ op: 'set', path: ['speedMode'], value: 'fast' }],
+    revision: 2,
   }])
 })

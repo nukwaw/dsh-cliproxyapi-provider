@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { catalogURL, modelProfileOf, readCodexCatalog, reasoningEffortsOf } from '../src/catalog.js'
+import { capabilitiesOf, catalogURL, modelProfileOf, readCodexCatalog, reasoningEffortsOf } from '../src/catalog.js'
+
+const OPTIONS = { defaultContextWindow: 262144, defaultMaxTokens: 32768, defaultInput: ['text'] }
 
 test('maps Codex reasoning levels to Harness canonical levels', () => {
   assert.deepEqual(reasoningEffortsOf({ supported_reasoning_levels: [
@@ -19,14 +21,14 @@ test('maps model metadata and applies safe fallbacks', () => {
     slug: 'gpt-test', display_name: 'GPT Test', max_context_window: 372000,
     input_modalities: ['text', 'image', 'audio'],
     supported_reasoning_levels: [{ effort: 'low' }, { effort: 'xhigh' }],
-  }, { defaultContextWindow: 262144, defaultMaxTokens: 32768, defaultInput: ['text'] }), {
+  }, OPTIONS), {
     id: 'gpt-test', name: 'GPT Test', contextWindow: 372000, maxTokens: 32768,
     input: ['text', 'image'], reasoningEfforts: { low: 'low', xhigh: 'xhigh' },
   })
 })
 
 test('extracts modalities and reasoning from the Codex catalog response', () => {
-  const models = readCodexCatalog({ models: [
+  const { models } = readCodexCatalog({ models: [
     {
       slug: 'gpt-5.6-sol',
       display_name: 'GPT 5.6 Sol',
@@ -47,7 +49,7 @@ test('extracts modalities and reasoning from the Codex catalog response', () => 
       max_context_window: 128000,
       input_modalities: ['text'],
     },
-  ] }, { defaultContextWindow: 262144, defaultMaxTokens: 32768, defaultInput: ['text'] })
+  ] }, OPTIONS)
 
   assert.deepEqual(models, [
     {
@@ -71,11 +73,7 @@ test('extracts modalities and reasoning from the Codex catalog response', () => 
 })
 
 test('uses configured fallbacks when catalog capability fields are absent', () => {
-  assert.deepEqual(modelProfileOf({ slug: 'fallback-model' }, {
-    defaultContextWindow: 262144,
-    defaultMaxTokens: 32768,
-    defaultInput: ['text'],
-  }), {
+  assert.deepEqual(modelProfileOf({ slug: 'fallback-model' }, OPTIONS), {
     id: 'fallback-model',
     name: 'fallback-model',
     contextWindow: 262144,
@@ -85,12 +83,44 @@ test('uses configured fallbacks when catalog capability fields are absent', () =
 })
 
 test('filters hidden models by default and deduplicates slugs', () => {
-  const models = readCodexCatalog({ models: [
+  const { models } = readCodexCatalog({ models: [
     { slug: 'visible', context_window: 1000 },
     { slug: 'visible', context_window: 2000 },
     { slug: 'hidden', visibility: 'hide', context_window: 3000 },
-  ] }, { defaultContextWindow: 262144, defaultMaxTokens: 32768, defaultInput: ['text'] })
+  ] }, OPTIONS)
   assert.deepEqual(models.map((model) => model.id), ['visible'])
+})
+
+test('reports fast and search capabilities from the catalog signals', () => {
+  assert.deepEqual(capabilitiesOf({
+    service_tiers: [{ id: 'priority', name: 'Fast' }],
+    supports_search_tool: true,
+  }), { fast: true, search: true })
+  assert.deepEqual(capabilitiesOf({ service_tiers: [] }), { fast: false, search: false })
+  assert.deepEqual(capabilitiesOf({}), { fast: false, search: false })
+  // kimi entries advertise additional_speed_tiers but an empty service_tiers
+  // list — only the wire-forwarded service_tiers signal may enable Fast.
+  assert.deepEqual(capabilitiesOf({ additional_speed_tiers: ['fast'], service_tiers: [] }), { fast: false, search: false })
+})
+
+test('collects per-model capabilities alongside the profiles', () => {
+  const { models, capabilities } = readCodexCatalog({ models: [
+    {
+      slug: 'gpt-5.6-sol',
+      service_tiers: [{ id: 'priority', name: 'Fast' }],
+      supports_search_tool: true,
+    },
+    { slug: 'gpt-5.3-codex-spark', service_tiers: [] },
+    { slug: 'plain-model' },
+  ] }, OPTIONS)
+
+  assert.deepEqual(models.map((model) => model.id), ['gpt-5.6-sol', 'gpt-5.3-codex-spark', 'plain-model'])
+  assert.deepEqual(Object.fromEntries(capabilities), {
+    'gpt-5.6-sol': { fast: true, search: true },
+    'gpt-5.3-codex-spark': { fast: false, search: false },
+    'plain-model': { fast: false, search: false },
+  })
+  assert.equal(models[0].samplingParams, undefined)
 })
 
 test('builds the Codex-compatible catalog URL', () => {

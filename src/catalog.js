@@ -50,6 +50,17 @@ function inputModalitiesOf(entry, fallback) {
   return modalities.length ? modalities : [...fallback]
 }
 
+// CLIProxyAPI's Codex translators forward `service_tier` only when it is
+// exactly "priority"; a catalog entry advertising any service tier accepts the
+// fast dispatch. Server-side web search is declared per model by the catalog's
+// supports_search_tool flag and mapped upstream by CLIProxyAPI itself.
+export function capabilitiesOf(entry) {
+  return {
+    fast: Array.isArray(entry?.service_tiers) && entry.service_tiers.length > 0,
+    search: entry?.supports_search_tool === true,
+  }
+}
+
 export function modelProfileOf(entry, options = {}) {
   const id = nonEmptyString(entry?.slug, entry?.id, entry?.model)
   if (!id || (!options.includeHiddenModels && entry?.visibility === 'hide')) return undefined
@@ -68,14 +79,16 @@ export function readCodexCatalog(body, options = {}) {
   if (!body || !Array.isArray(body.models)) throw new TypeError('CLIProxyAPI model catalog has no "models" array')
   const models = []
   const seen = new Set()
+  const capabilities = new Map()
   for (const entry of body.models) {
     const model = modelProfileOf(entry, options)
     if (!model || seen.has(model.id)) continue
     seen.add(model.id)
     models.push(model)
+    capabilities.set(model.id, capabilitiesOf(entry))
   }
   if (!models.length) throw new TypeError('CLIProxyAPI model catalog contains no usable models')
-  return models
+  return { models, capabilities }
 }
 
 export function catalogURL(baseURL) {
