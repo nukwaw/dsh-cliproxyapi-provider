@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
-import { createUserMessage, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createToolResultMessage, createUserMessage, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { Config as PiAiConfig, apply as applyPiAi } from '@deepseek-ai/dsh-llm-pi-ai'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { Config, PLACEHOLDER_AUTHORIZATION, apply } from '../src/index.js'
 
@@ -25,7 +26,7 @@ const CATALOG_BODY = {
   ],
 }
 
-function createHarness() {
+function createHarness(catalogBody = CATALOG_BODY) {
   const document = {}
 
   const requests = []
@@ -37,7 +38,7 @@ function createHarness() {
     for (const [key, value] of new Headers(init?.headers)) headers.set(key, value)
     if (method === 'GET' && url.includes('/models?')) {
       requests.push({ url, authorization: headers.get('authorization') })
-      return new Response(JSON.stringify(CATALOG_BODY), { status: 200 })
+      return new Response(JSON.stringify(catalogBody), { status: 200 })
     }
     const body = JSON.parse(init?.body ?? '{}')
     requests.push({ url, body, authorization: headers.get('authorization') })
@@ -62,8 +63,8 @@ async function waitFor(predicate, timeoutMs = 2000) {
   }
 }
 
-async function startStack({ document, credential, pluginConfig } = {}) {
-  const harness = createHarness()
+async function startStack({ document, credential, pluginConfig, piAiProviders, catalogBody } = {}) {
+  const harness = createHarness(catalogBody)
   if (document !== undefined) harness.document = document
 
   class MemorySettings extends SettingsProvider {
@@ -95,6 +96,12 @@ async function startStack({ document, credential, pluginConfig } = {}) {
   const ctx = new Context()
   const fibers = [ctx.plugin(LlmRuntime), ctx.plugin(MemorySettings), ctx.plugin(MemoryCredentials), ctx.plugin(TimerService)]
   await Promise.all(fibers.map((fiber) => fiber.await()))
+  if (piAiProviders !== undefined) {
+    const parsed = await PiAiConfig['~standard'].validate({ providers: piAiProviders })
+    assert.equal(parsed.issues, undefined)
+    fibers.push(ctx.plugin({ name: 'llm-pi-ai', inject: ['llm'], Config: PiAiConfig, apply: applyPiAi }, parsed.value))
+    await fibers.at(-1).await()
+  }
   fibers.push(ctx.plugin({
     name: 'llm-cliproxyapi',
     inject: ['settings', 'credentials', 'llm', 'timer'],
@@ -132,6 +139,41 @@ test('stays dormant until a baseURL is configured, then owns the route', async (
     await stack.dispose()
   }
 })
+
+for (const legacyRoute of [false, true]) {
+  test(`Remove unpublishes only the route it owns (legacy=${legacyRoute})`, async () => {
+    const profile = {
+      api: 'openai-responses', baseURL: 'http://127.0.0.1:8317/v1',
+      models: [{ id: 'gpt-5.6-sol', contextWindow: 272000, maxTokens: 128000 }],
+    }
+    const stack = await startStack({
+      piAiProviders: { openai: profile },
+      // Legacy installs persisted this route in user settings, not composition
+      // defaults (unsetting an override must not uncover a base-config route).
+      document: legacyRoute ? { 'llm-pi-ai': { providers: { CLIProxyAPI: profile } } } : undefined,
+    })
+    try {
+      const { ctx } = stack
+      await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['baseURL'], value: profile.baseURL }])
+      await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
+      await ctx.settings.mutate('llm-cliproxyapi', [
+        { op: 'unset', path: ['baseURL'] },
+        { op: 'unset', path: ['models'] },
+      ])
+      await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI') === legacyRoute)
+      assert.equal(ctx.llm.listProviders().some((provider) => provider.id === 'openai'), true)
+      if (legacyRoute) {
+        // This is a live second configuration, not stale model-picker cache.
+        assert.equal((await ctx.llm.listModels('CLIProxyAPI')).length, 1)
+        await ctx.settings.mutate('llm-pi-ai', [{ op: 'unset', path: ['providers', 'CLIProxyAPI'] }])
+        await waitFor(() => !ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
+        assert.equal(ctx.llm.listProviders().some((provider) => provider.id === 'openai'), true)
+      }
+    } finally {
+      await stack.dispose()
+    }
+  })
+}
 
 test('the model whitelist narrows the served catalog without a refetch', async () => {
   const stack = await startStack()
@@ -254,6 +296,113 @@ test('a stored credential authenticates catalog and inference requests', async (
     assert.equal(catalogRequest.authorization, 'Bearer sk-live-test')
     const inference = harness.requests.find((request) => !request.url.includes('/models?'))
     assert.equal(inference.authorization, 'Bearer sk-live-test')
+  } finally {
+    await stack.dispose()
+  }
+})
+
+test('bash optional arguments match builtin OpenAI on initial and tool-result turns', async (t) => {
+  const previousDebug = process.env.CPA_DEBUG
+  process.env.CPA_DEBUG = '1'
+  t.after(() => {
+    if (previousDebug === undefined) delete process.env.CPA_DEBUG
+    else process.env.CPA_DEBUG = previousDebug
+  })
+  const dispatches = []
+  t.mock.method(console, 'info', (label, data) => {
+    if (label === '[dsh-cliproxyapi] dispatch') dispatches.push(JSON.parse(data))
+  })
+  const model = 'gpt-6-astra'
+  const stack = await startStack({
+    credential: 'sk-test',
+    catalogBody: { models: [{
+      slug: model,
+      supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map((effort) => ({ effort })),
+      service_tiers: [{ id: 'priority' }],
+      supports_search_tool: true,
+    }] },
+    pluginConfig: { defaultContextWindow: 272000, defaultMaxTokens: 128000 },
+    piAiProviders: {
+      openai: {
+        baseURL: 'http://127.0.0.1:8317/v1',
+        apiKeyEnv: 'OPENAI_API_KEY',
+        models: [{ id: model, contextWindow: 272000, maxTokens: 128000 }],
+        cacheRetention: 'short', transport: 'sse',
+      },
+    },
+  })
+  const bash = {
+    name: 'bash',
+    description: 'Execute a bash command. Request escalation only after a denial and only to a strictly wider sandbox mode.',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string' },
+        description: { type: 'string' },
+        workdir: { type: 'string' },
+        timeoutMs: { type: 'number' },
+        run_in_background: { type: 'boolean' },
+        sandbox_permissions: { type: 'string', enum: ['workspace-write', 'danger-full-access'] },
+        justification: { type: 'string' },
+      },
+      required: ['command', 'description'],
+    },
+  }
+  const system = 'Current sandbox mode: danger-full-access. Never request sandbox_permissions when already in full access. Omit optional escalation fields on normal calls.'
+  const user = createUserMessage({ content: [{ type: 'text', text: 'Print the current directory, then list its files.' }], source: { kind: 'user' } })
+  const callId = 'call_test|fc_test'
+  const args = JSON.stringify({ command: 'pwd', description: 'Print current directory' })
+  const history = (provider) => [
+    user,
+    createAssistantMessage({
+      content: [{ type: 'tool-call', id: callId, name: 'bash', arguments: args }],
+      source: {
+        provider, model,
+        replayState: {
+          response: { kind: 'pi-ai', version: 2, api: 'openai-responses', provider, model, stopReason: 'toolUse' },
+          blocks: [{ type: 'tool-call' }],
+        },
+      },
+    }),
+    createToolResultMessage({ callId, content: [{ type: 'text', text: '/workspace' }], isError: false }),
+  ]
+  try {
+    const { ctx, harness } = stack
+    await ctx.settings.mutate('llm-cliproxyapi', [
+      { op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' },
+      { op: 'set', path: ['webSearch'], value: false },
+    ])
+    await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
+    const capture = async (provider, messages) => {
+      const before = harness.requests.length
+      for await (const _ of ctx.llm.stream({ provider, model, reasoningEffort: 'high', system, messages, tools: [bash] })) {}
+      const requests = harness.requests.slice(before)
+      assert.equal(requests.length, 1, `${provider} must send exactly one HTTP request`)
+      return requests[0].body
+    }
+    for (const speedMode of ['standard', 'fast']) {
+      for (const webSearch of [false, true]) {
+        await ctx.settings.mutate('llm-cliproxyapi', [
+          { op: 'set', path: ['speedMode'], value: speedMode },
+          { op: 'set', path: ['webSearch'], value: webSearch },
+        ])
+        for (const followUp of [false, true]) {
+          const builtin = await capture('openai', followUp ? history('openai') : [user])
+          const custom = await capture('CLIProxyAPI', followUp ? history('CLIProxyAPI') : [user])
+          assert.equal(builtin.tools[0].strict, false)
+          assert.equal(custom.reasoning.effort, 'high')
+          assert.deepEqual(custom.input, builtin.input, 'system instructions and tool history must survive unchanged')
+          assert.deepEqual(custom.tools.filter((tool) => tool.type === 'function'), builtin.tools, 'explicit strict:false must keep sandbox_permissions optional')
+          assert.deepEqual(custom.tools[0].parameters.required, ['command', 'description'])
+          const expected = structuredClone(builtin)
+          if (speedMode === 'fast') expected.service_tier = 'priority'
+          if (webSearch) expected.tools.push({ type: 'web_search' })
+          assert.deepEqual(custom, expected)
+        }
+      }
+    }
+    assert.equal(dispatches.length, 8)
+    assert.ok(dispatches.every((dispatch) => dispatch.reasoningEffort === 'high'))
   } finally {
     await stack.dispose()
   }

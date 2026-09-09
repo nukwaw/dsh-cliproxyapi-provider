@@ -24,6 +24,7 @@ test('materializes a catalog profile into a pi-ai model', () => {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 372000,
     maxTokens: 32768,
+    compat: { supportsStrictMode: true },
   })
 })
 

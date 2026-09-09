@@ -32,6 +32,11 @@ export function toPiModel(profile, baseURL, providerId) {
     cost: { ...NO_COST },
     contextWindow: profile.contextWindow,
     maxTokens: profile.maxTokens,
+    // Responses defaults omitted tool.strict to strict validation. DSH's tools
+    // intentionally have optional, non-nullable fields (e.g. sandbox_permissions).
+    // This capability makes pi-ai emit strict:false for ordinary function tools,
+    // matching builtin OpenAI, rather than omitting the opt-out entirely.
+    compat: { supportsStrictMode: true },
   }
   const efforts = profile.reasoningEfforts
   if (efforts && Object.keys(efforts).length > 0) {
@@ -96,11 +101,11 @@ export function withPreferences(model, options, resolvePreferences) {
  */
 export function createCliProxyApiProvider({ id, name, baseURL, models, resolvePreferences }) {
   const streams = openAIResponsesApi()
-  const wrap = (dispatch) => (model, context, options) => {
+  const wrap = (dispatch, reasoningField) => (model, context, options) => {
     if (process.env.CPA_DEBUG) {
       console.info('[dsh-cliproxyapi] dispatch', JSON.stringify({
         model: model?.id,
-        reasoningEffort: options?.reasoningEffort ?? null,
+        reasoningEffort: options?.[reasoningField] ?? null,
         hasOnPayload: typeof options?.onPayload === 'function',
       }))
     }
@@ -120,7 +125,7 @@ export function createCliProxyApiProvider({ id, name, baseURL, models, resolvePr
       }),
     }),
     getModels: () => models,
-    stream: wrap(streams.stream),
-    streamSimple: wrap(streams.streamSimple),
+    stream: wrap(streams.stream, 'reasoningEffort'),
+    streamSimple: wrap(streams.streamSimple, 'reasoning'),
   })
 }

@@ -38,6 +38,12 @@ After opening Harness:
 
 For Fast-capable models you can flip **Speed** anytime from the composer speed chip; the choice applies to all sessions. Set `CPA_DEBUG=1` on the `dsh web` process to log the dispatched model and reasoning effort of every request for debugging.
 
+## Tool-call compatibility
+
+The provider enables pi-ai's `compat.supportsStrictMode` capability so ordinary function tools explicitly send **`strict: false`**, matching the built-in OpenAI provider. Enabling this capability does not turn strict validation on. Omitting `strict` lets the Responses backend enforce strict schemas, which can force optional fields such as bash's `sandbox_permissions` and `justification` into otherwise ordinary calls.
+
+The regression tests compare serialized requests against the built-in provider, including explicit High effort, optional bash arguments, and tool-result history. `scripts/probe-tool-strict.mjs` is a manual live A/B probe: it sends two small requests that differ only in the tool's `strict` field, prints the returned arguments, and **never executes the returned tool calls**. It uses `OPENAI_API_KEY` or `DSH_CLIPROXY_API_KEY`; `CPA_TEST_BASE_URL` and `CPA_TEST_MODEL` optionally override its endpoint and model. It is not run by `npm test`.
+
 ## Upgrade notes
 
 Earlier versions worked through a provider profile of the built-in `llm-pi-ai` plugin (`llm-pi-ai.providers.CLIProxyAPI`). The current version owns the `CLIProxyAPI` route itself and no longer migrates the old profile: if you configured CLIProxyAPI through an older version, open the built-in **pi-ai** settings page, remove its `CLIProxyAPI` provider entry, then configure the connection on this plugin's settings page.
