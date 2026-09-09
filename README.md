@@ -38,6 +38,14 @@ After opening Harness:
 
 For Fast-capable models you can flip **Speed** anytime from the composer speed chip; the choice applies to all sessions. Set `CPA_DEBUG=1` on the `dsh web` process to log the dispatched model and reasoning effort of every request for debugging.
 
+## Server-side search overhead
+
+When **server-side web search** is enabled, the plugin declares the native Responses `web_search` tool on every request for supported models. The upstream model includes its tool context in input-token usage even when the prompt does not require browsing. This also affects auxiliary requests such as session-title generation; the current pi-ai adapter does not expose their purpose to this provider.
+
+For a like-for-like token comparison with the built-in OpenAI provider, turn this toggle **off** and save. This does not change reasoning effort or ordinary DSH function tools. A controlled GPT-6-Astra High probe measured **327 input tokens** with both built-in OpenAI and this plugin with search off, versus **4,685** with search on: **4,358 extra input tokens** from declaring the native tool. The amount is model/backend-dependent; cached tokens still count toward total input tokens.
+
+Run `scripts/probe-search-tokens.mjs` manually to repeat that comparison. It uses the same API-key and endpoint/model environment variables as the strict-mode probe below, makes three small model requests, checks that the payloads differ only by the native search declaration, and prints total input usage including cached input. It is not part of `npm test`.
+
 ## Tool-call compatibility
 
 The provider enables pi-ai's `compat.supportsStrictMode` capability so ordinary function tools explicitly send **`strict: false`**, matching the built-in OpenAI provider. Enabling this capability does not turn strict validation on. Omitting `strict` lets the Responses backend enforce strict schemas, which can force optional fields such as bash's `sandbox_permissions` and `justification` into otherwise ordinary calls.
