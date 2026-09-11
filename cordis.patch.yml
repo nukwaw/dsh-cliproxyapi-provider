@@ -1,6 +1,5 @@
 # Install the CLIProxyAPI provider plugin. It owns the CLIProxyAPI provider
-# route itself (adapter, catalog sync, Fast mode, server-side web search) and
-# migrates any route profile an older version wrote into llm-pi-ai settings.
+# route itself (adapter, catalog sync, Fast mode, server-side web search).
 - insert:
     - id: llm-cliproxyapi
-      name: '@router-for-me/dsh-cliproxyapi-provider'
+      name: 'dsh-cliproxyapi-provider'
