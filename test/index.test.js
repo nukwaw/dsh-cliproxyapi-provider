@@ -93,8 +93,17 @@ async function startStack({ document, credential, pluginConfig, piAiProviders, c
     }
   }
 
+  // Minimal stand-in for dsh-web's registry seam: just the provider map the
+  // fake-ip resolver fix patches into.
+  class MemoryWeb extends Service {
+    constructor(ctx) {
+      super(ctx, 'web')
+      this.fetchProviders = new Map()
+    }
+  }
+
   const ctx = new Context()
-  const fibers = [ctx.plugin(LlmRuntime), ctx.plugin(MemorySettings), ctx.plugin(MemoryCredentials), ctx.plugin(TimerService)]
+  const fibers = [ctx.plugin(LlmRuntime), ctx.plugin(MemorySettings), ctx.plugin(MemoryCredentials), ctx.plugin(TimerService), ctx.plugin(MemoryWeb)]
   await Promise.all(fibers.map((fiber) => fiber.await()))
   if (piAiProviders !== undefined) {
     const parsed = await PiAiConfig['~standard'].validate({ providers: piAiProviders })
@@ -104,7 +113,7 @@ async function startStack({ document, credential, pluginConfig, piAiProviders, c
   }
   fibers.push(ctx.plugin({
     name: 'llm-cliproxyapi',
-    inject: ['settings', 'credentials', 'llm', 'timer'],
+    inject: ['settings', 'credentials', 'llm', 'timer', 'web'],
     Config,
     apply,
   }, await resolvedConfig({ retryInitialMs: 10, retryMaxMs: 20, ...pluginConfig })))
@@ -528,6 +537,24 @@ test('discovery serves draft validation from the catalog', async () => {
     assert.equal(discovered[0].contextWindow, 262144)
   } finally {
     await stack.dispose()
+  }
+})
+
+test('the fake-ip fix patches the registered fetch resolver without replacing the provider', async () => {
+  const stack = await startStack()
+  try {
+    const { ctx } = stack
+    const original = async () => [{ address: '93.184.216.34', family: 4 }]
+    const provider = { id: 'http', available: () => true, resolveAddresses: original, fetch: async () => ({ statusCode: 200 }) }
+    ctx.web.fetchProviders.set('http', provider)
+    // The plugin applied before this registration; its retry loop must still patch it.
+    await waitFor(() => provider.resolveAddresses !== original)
+    // Disposing the stack restores the stock resolver (cleanup order: plugin first).
+    await stack.dispose()
+    assert.equal(provider.resolveAddresses, original)
+    return
+  } finally {
+    await stack.dispose().catch(() => {})
   }
 })
 

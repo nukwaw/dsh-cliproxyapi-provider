@@ -1,6 +1,6 @@
 {
   "name": "dsh-cliproxyapi-provider",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "GUI-configurable CLIProxyAPI Responses provider for DeepSeek Harness, with Fast mode and server-side web search",
   "type": "module",
   "main": "./src/index.js",
@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/catalog.js && node --check src/provider.js && node --check src/settings-contract.js && node --check client.js && node --test",
+    "check": "node --check src/index.js && node --check src/catalog.js && node --check src/provider.js && node --check src/settings-contract.js && node --check src/web-fetch-fix.js && node --check client.js && node --test",
     "pack:github": "npm pack"
   },
   "dsh": {

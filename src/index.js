@@ -4,6 +4,7 @@ import { assertUsableApiKey } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { catalogURL, readCodexCatalog } from './catalog.js'
 import { createCliProxyApiProvider, toPiModel } from './provider.js'
+import { installWebFetchFix } from './web-fetch-fix.js'
 import {
   BASE_URL_FIELD,
   DEFAULT_SPEED_MODE,
@@ -28,7 +29,7 @@ const NO_MODELS = new Set()
 export const PLACEHOLDER_AUTHORIZATION = 'Bearer dsh-cliproxyapi-no-key'
 
 export const name = 'llm-cliproxyapi'
-export const inject = ['settings', 'credentials', 'llm', 'timer']
+export const inject = ['settings', 'credentials', 'llm', 'timer', 'web']
 
 export const Config = z.object({
   defaultContextWindow: z.number().step(1).min(1).default(262144),
@@ -143,6 +144,10 @@ const emptyAuthContext = Object.freeze({
 })
 
 export function apply(ctx, config) {
+  // Unconditional, model-independent: local web_fetch must work behind
+  // transparent-proxy fake-ip DNS regardless of any routing preference.
+  installWebFetchFix(ctx)
+
   const settings = ctx.settings.register(SETTINGS_NAMESPACE, z.object({
     [BASE_URL_FIELD]: z.string(),
     [SPEED_MODE_FIELD]: z.union([SPEED_MODE_STANDARD, SPEED_MODE_FAST]).default(DEFAULT_SPEED_MODE),
