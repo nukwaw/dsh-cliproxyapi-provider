@@ -211,6 +211,9 @@ export function apply(ctx, config) {
         resolvePreferences: preferences,
       }),
       configuredMaxTokens: new Map(),
+      // PiAiAdapter reads per-model catalog diagnostics on every resolution;
+      // this plugin's catalog is fetched live, so there are none to report.
+      modelErrors: new Map(),
       streamIdleTimeoutMs: STREAM_IDLE_TIMEOUT_MS,
       maxRequestImageBytes: MAX_REQUEST_IMAGE_BYTES,
       requestImagePixelBudget: REQUEST_IMAGE_PIXEL_BUDGET,
