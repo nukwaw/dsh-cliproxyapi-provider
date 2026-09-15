@@ -3,22 +3,19 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { assertUsableApiKey } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { catalogURL, readCodexCatalog } from './catalog.js'
-import { createCliProxyApiProvider, toPiModel } from './provider.js'
+import { createCliProxyApiProvider, toPiModel, webRoutingOf } from './provider.js'
 import { installWebFetchFix } from './web-fetch-fix.js'
 import {
   BASE_URL_FIELD,
   DEFAULT_SPEED_MODE,
-  DEFAULT_WEB_SEARCH,
   MODELS_FIELD,
   SETTINGS_NAMESPACE,
   SPEED_MODE_FAST,
   SPEED_MODE_FIELD,
   SPEED_MODE_STANDARD,
-  WEB_SEARCH_FIELD,
   normalizeBaseURL,
   normalizeModelFilter,
   normalizeSpeedMode,
-  normalizeWebSearch,
 } from './settings-contract.js'
 
 const MAX_CATALOG_BYTES = 4 * 1024 * 1024
@@ -130,6 +127,27 @@ async function fetchCatalog(request, config, signal) {
   })
 }
 
+/**
+ * Describe the harness-side search tier that serves models the upstream cannot
+ * search for. `ctx.web` exposes its registries the way the fetch fix already
+ * reaches them, and a provider's `available()` is a local usability check by
+ * contract, so this never touches the network.
+ */
+function localSearchTier(ctx) {
+  const providers = ctx.web?.searchProviders
+  if (!(providers instanceof Map) || providers.size === 0) {
+    return 'no local search provider is registered, so those calls fail with WEB_PROVIDER_CREDENTIAL_MISSING'
+  }
+  for (const provider of providers.values()) {
+    try {
+      if (provider?.available?.() === true) return 'a local search provider is available'
+    } catch {
+      // A provider that throws from its usability probe is simply unusable.
+    }
+  }
+  return 'the registered local search provider reports unavailable (WEB_PROVIDER_UNAVAILABLE)'
+}
+
 /** pi-ai keeps nothing in this store: the route authenticates per request. */
 const emptyCredentialStore = Object.freeze({
   read: () => Promise.resolve(undefined),
@@ -144,14 +162,14 @@ const emptyAuthContext = Object.freeze({
 })
 
 export function apply(ctx, config) {
-  // Unconditional, model-independent: local web_fetch must work behind
-  // transparent-proxy fake-ip DNS regardless of any routing preference.
+  // Unconditional and model-independent: local web_fetch must keep working
+  // behind transparent-proxy fake-ip DNS for every model whose page retrieval
+  // is not routed upstream.
   installWebFetchFix(ctx)
 
   const settings = ctx.settings.register(SETTINGS_NAMESPACE, z.object({
     [BASE_URL_FIELD]: z.string(),
     [SPEED_MODE_FIELD]: z.union([SPEED_MODE_STANDARD, SPEED_MODE_FAST]).default(DEFAULT_SPEED_MODE),
-    [WEB_SEARCH_FIELD]: z.boolean().default(DEFAULT_WEB_SEARCH),
     [MODELS_FIELD]: z.array(z.string()).default([]),
   }))
 
@@ -168,10 +186,28 @@ export function apply(ctx, config) {
   // Read lazily per dispatch: a preference change needs no profile rebuild.
   const preferences = () => ({
     speedMode: normalizeSpeedMode(settings.get()?.[SPEED_MODE_FIELD]),
-    webSearch: normalizeWebSearch(settings.get()?.[WEB_SEARCH_FIELD]),
     fastModelIds: catalog?.fastModelIds ?? NO_MODELS,
     searchModelIds: catalog?.searchModelIds ?? NO_MODELS,
+    browsingModelIds: catalog?.browsingModelIds ?? NO_MODELS,
   })
+
+  // Web tool routing is reported once per model per catalog revision: how the
+  // upstream reaches the web is a catalog fact, and repeating it per request
+  // would drown the log.
+  const routingNotices = new Map()
+  const reportRouting = (model) => {
+    const id = model?.id
+    if (typeof id !== 'string' || id.length === 0 || routingNotices.get(id) === catalogRevision) return
+    routingNotices.set(id, catalogRevision)
+    const { search, browsing } = webRoutingOf(model, preferences())
+    if (!search) {
+      ctx.logger.info(`llm-cliproxyapi: model "${id}" has no native web search upstream; DSH's local web tools serve it (${localSearchTier(ctx)})`)
+    } else if (browsing) {
+      ctx.logger.info(`llm-cliproxyapi: model "${id}" routes web search and page retrieval upstream`)
+    } else {
+      ctx.logger.info(`llm-cliproxyapi: model "${id}" routes web search upstream; page retrieval stays local`)
+    }
+  }
 
   const adapter = new PiAiAdapter({
     profiles: () => profiles(),
@@ -214,6 +250,7 @@ export function apply(ctx, config) {
         baseURL,
         models: piModels,
         resolvePreferences: preferences,
+        onDispatch: reportRouting,
       }),
       configuredMaxTokens: new Map(),
       // PiAiAdapter reads per-model catalog diagnostics on every resolution;
@@ -321,16 +358,20 @@ export function apply(ctx, config) {
             resolveApiKey: () => optionalApiKey(ctx),
           }, config, activeController.signal)
           hasStoredKey = (await optionalApiKey(ctx)) !== undefined
+          const capabilityEntries = [...result.capabilities]
           catalog = {
             models: result.models,
-            fastModelIds: new Set([...result.capabilities].filter(([, c]) => c.fast).map(([id]) => id)),
-            searchModelIds: new Set([...result.capabilities].filter(([, c]) => c.search).map(([id]) => id)),
+            fastModelIds: new Set(capabilityEntries.filter(([, c]) => c.fast).map(([id]) => id)),
+            searchModelIds: new Set(capabilityEntries.filter(([, c]) => c.search).map(([id]) => id)),
+            browsingModelIds: new Set(capabilityEntries.filter(([, c]) => c.browsing).map(([id]) => id)),
+            nativeSearchCount: capabilityEntries.filter(([, c]) => c.search).length,
+            unsupportedSearchCount: capabilityEntries.filter(([, c]) => c.declaredSearch === false).length,
           }
           catalogRevision += 1
           profiles()
           ensureRegistration()
           delay = config.refreshIntervalMs > 0 ? config.refreshIntervalMs : undefined
-          ctx.logger.info(`llm-cliproxyapi: synchronized ${catalog.models.length} models from ${baseURL}`)
+          ctx.logger.info(`llm-cliproxyapi: synchronized ${catalog.models.length} models from ${baseURL} (${catalog.nativeSearchCount} with native web search, ${catalog.unsupportedSearchCount} upstream-declared unsupported)`)
         } catch (error) {
           if (stopped) return
           ctx.logger.warn(`llm-cliproxyapi: catalog refresh failed: ${error?.message ?? error}`)

@@ -208,7 +208,7 @@ test('configuration validates the draft, stores the key, and writes the namespac
     operations,
     'http://127.0.0.1:8317/v1',
     'sk-new',
-    { speedMode: 'fast', webSearch: false, models: ['gpt-5.6-sol'] },
+    { speedMode: 'fast', models: ['gpt-5.6-sol'] },
     messages,
   )
   assert.equal(discoveryNs, 'llm-cliproxyapi')
@@ -221,7 +221,6 @@ test('configuration validates the draft, stores the key, and writes the namespac
     ops: [
       { op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' },
       { op: 'set', path: ['speedMode'], value: 'fast' },
-      { op: 'set', path: ['webSearch'], value: false },
       { op: 'set', path: ['models'], value: ['gpt-5.6-sol'] },
     ],
   })
@@ -240,7 +239,7 @@ test('configuration refuses a server without usable models', async () => {
       mutateSettings: async () => {
         mutated = true
       },
-    }, 'http://127.0.0.1:8317/v1', '', { speedMode: 'standard', webSearch: true }, { noModels: 'no models' }),
+    }, 'http://127.0.0.1:8317/v1', '', { speedMode: 'standard' }, { noModels: 'no models' }),
     /no models/,
   )
   assert.equal(mutated, false)
@@ -289,7 +288,7 @@ test('preference snapshots memoize until the section changes', async () => {
   const first = preference.getSnapshot()
   assert.equal(preference.getSnapshot(), first)
   assert.equal(first.speedMode, 'fast')
-  assert.equal(first.webSearch, true)
+  assert.equal('webSearch' in first, false, 'the search preference is gone')
   snapshot = { ...snapshot, revision: 2, value: { ...snapshot.value, speedMode: 'standard' } }
   const second = preference.getSnapshot()
   assert.notEqual(second, first)

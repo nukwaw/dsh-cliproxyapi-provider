@@ -1,6 +1,7 @@
-// Manual live comparison: builtin OpenAI, this provider with search off, then on.
-// Uses the same synthetic prompt/model/High effort and checks payload equality.
-// Costs three model requests. It never executes returned function/tool calls.
+// Manual live comparison: builtin OpenAI, then this provider with the native
+// search declaration withheld and declared. Uses the same synthetic
+// prompt/model/High effort and checks payload equality. Costs three model
+// requests. It never executes returned function/tool calls.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -52,11 +53,13 @@ let baseline
 const measurements = []
 const { apiKey, dispose } = await resolveKey()
 try {
-  for (const variant of ['builtin-openai', 'plugin-search-off', 'plugin-search-on']) {
-    const webSearch = variant === 'plugin-search-on'
+  for (const variant of ['builtin-openai', 'plugin-local-tools', 'plugin-native-search']) {
+    // The catalog verdict decides routing in production; this probe withholds it
+    // to measure the declaration's token cost.
+    const webSearch = variant === 'plugin-native-search'
     const provider = variant === 'builtin-openai' ? builtin : createCliProxyApiProvider({
       id: 'CLIProxyAPI', name: 'CLIProxyAPI', baseURL, models: [customModel],
-      resolvePreferences: () => ({ speedMode: 'standard', webSearch, fastModelIds: new Set(), searchModelIds: new Set([modelId]) }),
+      resolvePreferences: () => ({ speedMode: 'standard', fastModelIds: new Set(), searchModelIds: webSearch ? new Set([modelId]) : new Set(), browsingModelIds: new Set() }),
     })
     let request
     let result
@@ -90,8 +93,8 @@ try {
     console.log(JSON.stringify(measurement))
   }
   console.log(JSON.stringify({
-    pluginOverheadSearchOff: measurements[1].inputTokens - measurements[0].inputTokens,
-    webSearchOverhead: measurements[2].inputTokens - measurements[1].inputTokens,
+    pluginOverheadLocalTools: measurements[1].inputTokens - measurements[0].inputTokens,
+    nativeSearchOverhead: measurements[2].inputTokens - measurements[1].inputTokens,
   }))
 } finally {
   await dispose()

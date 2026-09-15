@@ -22,7 +22,6 @@ window.__ModuleLoader__.load({
     const SPEED_MODE_FIELD = 'speedMode'
     const SPEED_MODE_STANDARD = 'standard'
     const SPEED_MODE_FAST = 'fast'
-    const WEB_SEARCH_FIELD = 'webSearch'
     const MODELS_FIELD = 'models'
     const CREDENTIAL_REF = 'DSH_CLIPROXY_API_KEY'
     const PROVIDER = 'CLIProxyAPI'
@@ -59,6 +58,7 @@ window.__ModuleLoader__.load({
         tab: 'CLIProxyAPI',
         title: 'CLIProxyAPI',
         intro: 'Connect a CLIProxyAPI server and synchronize its model catalog.',
+        webRoutingHint: 'Web search and page retrieval route themselves: models the catalog reports as search-capable use CLIProxyAPI\'s native tools, every other model keeps the harness tools.',
         loading: 'Loading CLIProxyAPI settings…',
         unavailable: 'CLIProxyAPI settings are unavailable in this Web profile.',
         readOnly: 'Settings are read-only for this connection.',
@@ -75,8 +75,6 @@ window.__ModuleLoader__.load({
         speedStandardHint: 'Default service tier',
         speedFast: 'Fast',
         speedFastHint: 'Priority service tier for supported models',
-        webSearch: 'Server-side web search',
-        webSearchHint: 'Let supported models search the web through CLIProxyAPI',
         save: 'Save & Sync',
         saving: 'Saving…',
         saved: 'Saved. The CLIProxyAPI model catalog is synchronizing.',
@@ -103,6 +101,7 @@ window.__ModuleLoader__.load({
         tab: 'CLIProxyAPI',
         title: 'CLIProxyAPI',
         intro: '连接 CLIProxyAPI 服务并同步其模型目录。',
+        webRoutingHint: '联网搜索与网页读取会自动路由：目录中标记支持联网的模型使用 CLIProxyAPI 原生工具，其余模型继续使用 Harness 自带的工具。',
         loading: '正在读取 CLIProxyAPI 设置…',
         unavailable: '当前 Web 配置中无法访问 CLIProxyAPI 设置。',
         readOnly: '当前连接的设置为只读。',
@@ -119,8 +118,6 @@ window.__ModuleLoader__.load({
         speedStandardHint: '默认服务层级',
         speedFast: 'Fast',
         speedFastHint: '为支持的模型启用优先级服务层级',
-        webSearch: '服务端联网搜索',
-        webSearchHint: '让支持的模型通过 CLIProxyAPI 联网搜索',
         save: '保存并同步',
         saving: '保存中…',
         saved: '已保存，CLIProxyAPI 模型目录正在同步。',
@@ -326,7 +323,6 @@ window.__ModuleLoader__.load({
       await operations.mutateSettings(SETTINGS_NS, [
         { op: 'set', path: [BASE_URL_FIELD], value: baseURL },
         { op: 'set', path: [SPEED_MODE_FIELD], value: preferences.speedMode },
-        { op: 'set', path: [WEB_SEARCH_FIELD], value: preferences.webSearch },
         { op: 'set', path: [MODELS_FIELD], value: preferences.models ?? [] },
       ])
       return { discovered, hasCredential: Boolean(apiKey || credential?.configured) }
@@ -353,7 +349,6 @@ window.__ModuleLoader__.load({
       const [baseURL, setBaseURL] = useState(DEFAULT_BASE_URL)
       const [apiKey, setApiKey] = useState('')
       const [speedMode, setSpeedMode] = useState(SPEED_MODE_STANDARD)
-      const [webSearch, setWebSearch] = useState(true)
       const [modelFilter, setModelFilter] = useState(null)
       const [modalOpen, setModalOpen] = useState(false)
       const [loadedRevision, setLoadedRevision] = useState(undefined)
@@ -371,11 +366,10 @@ window.__ModuleLoader__.load({
         if (snapshot.revision === loadedRevision) return
         setBaseURL(configured ? snapshot.baseURL : DEFAULT_BASE_URL)
         setSpeedMode(snapshot.speedMode)
-        setWebSearch(snapshot.webSearch)
         setModelFilter(snapshot.models)
         setApiKey('')
         setLoadedRevision(snapshot.revision)
-      }, [loadedRevision, configured, snapshot.baseURL, snapshot.speedMode, snapshot.webSearch, snapshot.models, snapshot.revision, snapshot.status])
+      }, [loadedRevision, configured, snapshot.baseURL, snapshot.speedMode, snapshot.models, snapshot.revision, snapshot.status])
 
       useEffect(() => {
         let active = true
@@ -422,7 +416,7 @@ window.__ModuleLoader__.load({
         setFeedback({ text: '', error: false })
         try {
           validBaseURL(nextBaseURL, messages)
-          const result = await installConfiguration(operations, nextBaseURL, nextApiKey, { speedMode, webSearch, models: modelFilter ?? [] }, messages)
+          const result = await installConfiguration(operations, nextBaseURL, nextApiKey, { speedMode, models: modelFilter ?? [] }, messages)
           setApiKey('')
           setFeedback({ text: t('saved') + ' ' + result.discovered.length + ' ' + t('modelsSynced'), error: false })
         } catch (error) {
@@ -460,6 +454,7 @@ window.__ModuleLoader__.load({
           { style: styles.heading },
           React.createElement('h2', { style: styles.title }, t('title')),
           React.createElement('p', { style: styles.intro }, t('intro')),
+          React.createElement('p', { style: styles.hint }, t('webRoutingHint')),
         ),
         snapshot.status === 'unavailable'
           ? React.createElement('p', { style: styles.statusError, role: 'alert' }, t('unavailable'))
@@ -535,18 +530,6 @@ window.__ModuleLoader__.load({
               React.createElement('option', { value: SPEED_MODE_STANDARD }, t('speedStandard') + ' — ' + t('speedStandardHint')),
               React.createElement('option', { value: SPEED_MODE_FAST }, t('speedFast') + ' — ' + t('speedFastHint')),
             ),
-          ),
-          React.createElement(
-            'label',
-            { style: styles.fieldRow },
-            React.createElement('input', {
-              type: 'checkbox',
-              checked: webSearch,
-              disabled: !canWrite,
-              onChange: (event) => setWebSearch(event.currentTarget.checked),
-            }),
-            React.createElement('span', { style: styles.label }, t('webSearch')),
-            React.createElement('span', { style: styles.hint }, t('webSearchHint')),
           ),
           React.createElement(
             'div',
@@ -639,7 +622,6 @@ window.__ModuleLoader__.load({
             snap?.revision ?? '',
             snap?.writable === true,
             value?.[SPEED_MODE_FIELD] ?? '',
-            value?.[WEB_SEARCH_FIELD] ?? '',
             JSON.stringify(models),
           ].join(':')
           if (key === cachedKey) return cachedSnapshot
@@ -650,7 +632,6 @@ window.__ModuleLoader__.load({
             writable: snap?.writable === true,
             baseURL: typeof value?.[BASE_URL_FIELD] === 'string' ? value[BASE_URL_FIELD] : undefined,
             speedMode: value?.[SPEED_MODE_FIELD] === SPEED_MODE_FAST ? SPEED_MODE_FAST : SPEED_MODE_STANDARD,
-            webSearch: value?.[WEB_SEARCH_FIELD] !== false,
             // null = no filter: the whole catalog is served.
             models: models.length > 0 ? models : null,
           })

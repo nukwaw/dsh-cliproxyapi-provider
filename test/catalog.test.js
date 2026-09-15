@@ -92,15 +92,40 @@ test('filters hidden models by default and deduplicates slugs', () => {
 })
 
 test('reports fast and search capabilities from the catalog signals', () => {
+  // Published verdict + the legacy Codex flag: the verdict is authoritative.
   assert.deepEqual(capabilitiesOf({
     service_tiers: [{ id: 'priority', name: 'Fast' }],
     supports_search_tool: true,
-  }), { fast: true, search: true })
-  assert.deepEqual(capabilitiesOf({ service_tiers: [] }), { fast: false, search: false })
-  assert.deepEqual(capabilitiesOf({}), { fast: false, search: false })
+    cpa_capabilities: { web_search: true },
+  }), { fast: true, search: true, browsing: true, declaredSearch: true })
+  // An explicit false beats a legacy true: the proxy resolved every route.
+  assert.deepEqual(capabilitiesOf({
+    supports_search_tool: true,
+    cpa_capabilities: { web_search: false },
+  }), { fast: false, search: false, browsing: false, declaredSearch: false })
+  // An older proxy (no verdict) and a capable non-OpenAI route: search yes,
+  // upstream page retrieval no.
+  assert.deepEqual(capabilitiesOf({ supports_search_tool: true }), {
+    fast: false, search: true, browsing: true, declaredSearch: undefined,
+  })
+  assert.deepEqual(capabilitiesOf({ cpa_capabilities: { web_search: true }, service_tiers: [] }), {
+    fast: false, search: true, browsing: false, declaredSearch: true,
+  })
+  assert.deepEqual(capabilitiesOf({ service_tiers: [] }), {
+    fast: false, search: false, browsing: false, declaredSearch: undefined,
+  })
+  assert.deepEqual(capabilitiesOf({}), {
+    fast: false, search: false, browsing: false, declaredSearch: undefined,
+  })
+  // A malformed verdict is treated as absent rather than as a claim.
+  assert.deepEqual(capabilitiesOf({ cpa_capabilities: { web_search: 'yes' } }), {
+    fast: false, search: false, browsing: false, declaredSearch: undefined,
+  })
   // kimi entries advertise additional_speed_tiers but an empty service_tiers
   // list — only the wire-forwarded service_tiers signal may enable Fast.
-  assert.deepEqual(capabilitiesOf({ additional_speed_tiers: ['fast'], service_tiers: [] }), { fast: false, search: false })
+  assert.deepEqual(capabilitiesOf({ additional_speed_tiers: ['fast'], service_tiers: [] }), {
+    fast: false, search: false, browsing: false, declaredSearch: undefined,
+  })
 })
 
 test('collects per-model capabilities alongside the profiles', () => {
@@ -109,24 +134,27 @@ test('collects per-model capabilities alongside the profiles', () => {
       slug: 'gpt-5.6-sol',
       service_tiers: [{ id: 'priority', name: 'Fast' }],
       supports_search_tool: true,
+      cpa_capabilities: { web_search: true },
     },
-    { slug: 'gpt-5.3-codex-spark', service_tiers: [] },
+    { slug: 'grok-4.6', service_tiers: [], cpa_capabilities: { web_search: true } },
+    { slug: 'gemini-3-pro', service_tiers: [], cpa_capabilities: { web_search: false } },
     { slug: 'plain-model' },
   ] }, OPTIONS)
 
-  assert.deepEqual(models.map((model) => model.id), ['gpt-5.6-sol', 'gpt-5.3-codex-spark', 'plain-model'])
+  assert.deepEqual(models.map((model) => model.id), ['gpt-5.6-sol', 'grok-4.6', 'gemini-3-pro', 'plain-model'])
   assert.deepEqual(Object.fromEntries(capabilities), {
-    'gpt-5.6-sol': { fast: true, search: true },
-    'gpt-5.3-codex-spark': { fast: false, search: false },
-    'plain-model': { fast: false, search: false },
+    'gpt-5.6-sol': { fast: true, search: true, browsing: true, declaredSearch: true },
+    'grok-4.6': { fast: false, search: true, browsing: false, declaredSearch: true },
+    'gemini-3-pro': { fast: false, search: false, browsing: false, declaredSearch: false },
+    'plain-model': { fast: false, search: false, browsing: false, declaredSearch: undefined },
   })
   assert.equal(models[0].samplingParams, undefined)
 })
 
-test('builds the Codex-compatible catalog URL', () => {
+test('builds the Codex-compatible catalog URL under the cpa client identity', () => {
   assert.equal(
     catalogURL('http://127.0.0.1:8317/v1/'),
-    'http://127.0.0.1:8317/v1/models?client_version=pi',
+    'http://127.0.0.1:8317/v1/models?client_version=cpa',
   )
 })
 
@@ -139,7 +167,9 @@ test('reads the standard OpenAI list envelope as a fallback', () => {
   assert.equal(models[0].reasoningEfforts, undefined)
   assert.equal(models[0].contextWindow, 262144)
   assert.equal(models[0].maxTokens, 32768)
-  assert.deepEqual(capabilities.get('plain-model'), { fast: false, search: false })
+  assert.deepEqual(capabilities.get('plain-model'), {
+    fast: false, search: false, browsing: false, declaredSearch: undefined,
+  })
 })
 
 test('reads a bare array envelope', () => {

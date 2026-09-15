@@ -1,7 +1,7 @@
 {
   "name": "dsh-cliproxyapi-provider",
-  "version": "0.5.5",
-  "description": "GUI-configurable CLIProxyAPI Responses provider for DeepSeek Harness, with Fast mode and server-side web search",
+  "version": "0.6.0",
+  "description": "GUI-configurable CLIProxyAPI Responses provider for DeepSeek Harness, with Fast mode and automatic web tool routing",
   "type": "module",
   "main": "./src/index.js",
   "exports": {

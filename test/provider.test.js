@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createCliProxyApiProvider, toPiModel, withPreferences } from '../src/provider.js'
+import { createCliProxyApiProvider, toPiModel, webRoutingOf, withPreferences } from '../src/provider.js'
 
 const PROFILE = {
   id: 'gpt-5.6-sol',
@@ -40,11 +40,11 @@ test('leaves reasoning unset when the catalog declares no efforts', () => {
   assert.equal(model.thinkingLevelMap, undefined)
 })
 
-const prefs = ({ speedMode = 'standard', webSearch = true, fastModelIds = [], searchModelIds = [] } = {}) => () => ({
+const prefs = ({ speedMode = 'standard', fastModelIds = [], searchModelIds = [], browsingModelIds = [] } = {}) => () => ({
   speedMode,
-  webSearch,
   fastModelIds: new Set(fastModelIds),
   searchModelIds: new Set(searchModelIds),
+  browsingModelIds: new Set(browsingModelIds),
 })
 
 test('returns options untouched when no preference applies', () => {
@@ -120,8 +120,8 @@ test('native search replaces only the DSH search function without mutating tools
   assert.deepEqual(await wrapped.onPayload(result), result, 'routing must be idempotent')
 })
 
-test('reasoning models route page retrieval upstream as well as search', async () => {
-  const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {}, prefs({ searchModelIds: [PROFILE.id] }))
+test('hosted-family reasoning models route page retrieval upstream as well as search', async () => {
+  const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {}, prefs({ searchModelIds: [PROFILE.id], browsingModelIds: [PROFILE.id] }))
   for (const tools of [
     [{ type: 'function', name: 'web_fetch' }],
     [{ type: 'function', name: 'web_search' }, { type: 'function', name: 'web_fetch' }],
@@ -181,7 +181,7 @@ test('native search translates a forced local search choice and retains native t
 })
 
 test('native browsing remaps removed functions in allowed tool choices without widening the allowlist', async () => {
-  const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {}, prefs({ searchModelIds: [PROFILE.id] }))
+  const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {}, prefs({ searchModelIds: [PROFILE.id], browsingModelIds: [PROFILE.id] }))
   const bash = { type: 'function', name: 'bash' }
   const payload = {
     tools: [{ type: 'function', name: 'web_search' }, { type: 'function', name: 'web_fetch' }, bash],
@@ -227,7 +227,7 @@ test('caller changes to the native variant keep forced and allowed search choice
   ]) {
     const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {
       onPayload: (payload) => ({ ...payload, tools: [{ type: 'web_search_preview', search_context_size: 'low' }] }),
-    }, prefs({ searchModelIds: [PROFILE.id] }))
+    }, prefs({ searchModelIds: [PROFILE.id], browsingModelIds: [PROFILE.id] }))
     const result = await wrapped.onPayload({ tool_choice })
     assert.deepEqual(result.tool_choice, tool_choice.type === 'allowed_tools'
       ? { type: 'allowed_tools', mode: 'required', tools: [{ type: 'web_search_preview' }] }
@@ -245,7 +245,7 @@ test('in-place hooks cannot restore local web tools or put stale guidance after 
       // Duplicate the plugin note, too: final normalization must keep one copy.
       payload.input.unshift(payload.input[1])
     },
-  }, prefs({ searchModelIds: [PROFILE.id] }))
+  }, prefs({ searchModelIds: [PROFILE.id], browsingModelIds: [PROFILE.id] }))
   const result = await wrapped.onPayload(original)
   assert.deepEqual(result.tools, [{ type: 'web_search' }])
   assert.equal(result.input.length, 3)
@@ -257,7 +257,7 @@ test('in-place hooks cannot restore local web tools or put stale guidance after 
 })
 
 test('native browsing preserves qualified names and unrelated namespace tools', async () => {
-  const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {}, prefs({ searchModelIds: [PROFILE.id] }))
+  const wrapped = withPreferences({ id: PROFILE.id, reasoning: true }, {}, prefs({ searchModelIds: [PROFILE.id], browsingModelIds: [PROFILE.id] }))
   const unrelated = [
     { type: 'function', name: 'functions.web_search' },
     { type: 'function', name: 'web_fetch', namespace: 'custom' },
@@ -267,36 +267,62 @@ test('native browsing preserves qualified names and unrelated namespace tools', 
   assert.deepEqual(result.tools, [...unrelated, { type: 'web_search' }])
 })
 
-test('disabled or unsupported search preserves the local search function, instructions, and choice', async () => {
+test('a model the catalog cannot search for preserves the local tools, instructions, and choice', async () => {
   const payload = {
     tools: [{ type: 'function', name: 'web_search' }, { type: 'function', name: 'web_fetch' }],
     instructions: 'Use web_search.',
     tool_choice: { type: 'function', name: 'web_search' },
   }
-  for (const settings of [
-    { webSearch: false, searchModelIds: [PROFILE.id] },
-    { webSearch: true, searchModelIds: [] },
-  ]) {
-    let called = false
-    const onPayload = (input) => { called = true; return input }
-    // Fast mode exercises the payload hook even though search is disabled.
-    const wrapped = withPreferences({ id: PROFILE.id }, { onPayload }, prefs({
-      ...settings, speedMode: 'fast', fastModelIds: [PROFILE.id],
-    }))
-    assert.deepEqual(await wrapped.onPayload(payload), { ...payload, service_tier: 'priority' })
-    assert.equal(called, true)
-  }
+  let called = false
+  const onPayload = (input) => { called = true; return input }
+  // Fast mode exercises the payload hook even though web search is not routed.
+  const wrapped = withPreferences({ id: PROFILE.id }, { onPayload }, prefs({
+    searchModelIds: [], speedMode: 'fast', fastModelIds: [PROFILE.id],
+  }))
+  assert.deepEqual(await wrapped.onPayload(payload), { ...payload, service_tier: 'priority' })
+  assert.equal(called, true)
 })
 
-test('web search respects the opt-out and the per-model catalog signal', async () => {
-  const off = withPreferences({ id: 'gpt-5.6-sol' }, {}, prefs({
-    webSearch: false, searchModelIds: ['gpt-5.6-sol'],
-  }))
-  assert.equal(off.onPayload, undefined)
+test('web search follows the per-model catalog verdict with no opt-out', async () => {
   const unlisted = withPreferences({ id: 'kimi-for-coding' }, {}, prefs({
     searchModelIds: ['gpt-5.6-sol'],
   }))
   assert.equal(unlisted.onPayload, undefined)
+  const listed = withPreferences({ id: 'gpt-5.6-sol' }, {}, prefs({
+    searchModelIds: ['gpt-5.6-sol'],
+  }))
+  assert.equal(typeof listed.onPayload, 'function')
+})
+
+test('routing tiers follow the catalog verdict and the model family', () => {
+  const prefsWith = prefs({ searchModelIds: ['sol', 'grok', 'gpt-5.5'], browsingModelIds: ['sol', 'gpt-5.5'] })
+  // Hosted family + reasoning: search and page retrieval both go upstream.
+  assert.deepEqual(webRoutingOf({ id: 'sol', reasoning: true }, prefsWith()), { search: true, browsing: true })
+  // Hosted family without reasoning keeps DSH web_fetch, matching the verified
+  // OpenAI behaviour that only reasoning models get the page actions.
+  assert.deepEqual(webRoutingOf({ id: 'gpt-5.5', reasoning: false }, prefsWith()), { search: true, browsing: false })
+  // Search-capable but not hosted-browsing (xAI/Anthropic): search only.
+  assert.deepEqual(webRoutingOf({ id: 'grok', reasoning: true }, prefsWith()), { search: true, browsing: false })
+  assert.deepEqual(webRoutingOf({ id: 'gemini-3-pro' }, prefsWith()), { search: false, browsing: false })
+  // A composer that omits the browsing set entirely must not throw.
+  assert.deepEqual(webRoutingOf({ id: 'sol', reasoning: true }, { searchModelIds: new Set(['sol']) }), { search: true, browsing: false })
+})
+
+test('search-only models keep the local fetch function and are told it stays local', async () => {
+  const wrapped = withPreferences({ id: 'claude-opus-5', reasoning: true }, {}, prefs({
+    searchModelIds: ['claude-opus-5'],
+  }))
+  const payload = {
+    tools: [{ type: 'function', name: 'web_search' }, { type: 'function', name: 'web_fetch' }],
+    input: [{ role: 'developer', content: 'Use web_search and web_fetch.' }],
+  }
+  const before = structuredClone(payload)
+  const result = await wrapped.onPayload(payload)
+  assert.deepEqual(result.tools, [{ type: 'function', name: 'web_fetch' }, { type: 'web_search' }])
+  assert.match(result.input[1].content, /native web_search/)
+  assert.match(result.input[1].content, /functions\.web_fetch/)
+  assert.doesNotMatch(result.input[1].content, /open_page/)
+  assert.deepEqual(payload, before)
 })
 
 test('a caller onPayload keeps final say, but preferences are re-asserted after it', async () => {

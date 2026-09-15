@@ -52,12 +52,31 @@ function inputModalitiesOf(entry, fallback) {
 
 // CLIProxyAPI's Codex translators forward `service_tier` only when it is
 // exactly "priority"; a catalog entry advertising any service tier accepts the
-// fast dispatch. Server-side web search is declared per model by the catalog's
-// supports_search_tool flag and mapped upstream by CLIProxyAPI itself.
+// fast dispatch.
+//
+// Native web search has two catalog signals. Since 7.3.1 the proxy resolves an
+// explicit per-model verdict across every route that can serve the model and
+// exposes it — for the `cpa` client identity only — as
+// `cpa_capabilities.web_search`: true, false, or absent ("the proxy has no
+// verified answer"). Older proxies, and models the proxy has no metadata for,
+// carry the legacy `supports_search_tool` Codex flag instead: true only for a
+// codex client template served exclusively by the codex provider.
+//
+// `browsing` marks the OpenAI/Codex hosted search family, the only one whose
+// tool action set includes open_page/find_in_page, so page retrieval may be
+// routed upstream for it. xAI's web_search browses pages inside the search call
+// but has no such actions, and Anthropic's is query-only.
 export function capabilitiesOf(entry) {
+  const declared = entry?.cpa_capabilities?.web_search
+  const explicit = typeof declared === 'boolean' ? declared : undefined
+  const legacy = entry?.supports_search_tool === true
+  const search = explicit === undefined ? legacy : explicit
   return {
     fast: Array.isArray(entry?.service_tiers) && entry.service_tiers.length > 0,
-    search: entry?.supports_search_tool === true,
+    search,
+    browsing: search && legacy,
+    // undefined = the proxy published no verdict; a boolean is authoritative.
+    declaredSearch: explicit,
   }
 }
 
@@ -75,7 +94,7 @@ export function modelProfileOf(entry, options = {}) {
   }
 }
 
-// CLIProxyAPI answers /models?client_version=pi with the Codex catalog
+// CLIProxyAPI answers /models?client_version=cpa with the Codex catalog
 // envelope ({ models: [...] }) when its Home integration is enabled, and with
 // the standard OpenAI list ({ data: [...] }) otherwise; some builds answer a
 // bare array. All three carry at least an id per entry, so the reader accepts
@@ -109,8 +128,9 @@ export function readCodexCatalog(body, options = {}) {
 export function catalogURL(baseURL) {
   const base = String(baseURL ?? '').trim().replace(/\/+$/, '')
   if (!base) throw new TypeError('CLIProxyAPI baseURL must not be empty')
-  // Identify as the pi client, matching the reference integration — the data
-  // returned for that identity is the shape pi-ai model definitions map from.
-  const query = new URLSearchParams({ client_version: 'pi' })
+  // The `cpa` identity is what makes the proxy publish `cpa_capabilities.web_search`
+  // (CLIProxyAPI >= 7.3.1); any other value yields the legacy Codex catalog, which
+  // is also what pre-7.3.1 builds answer. Every other field is identical.
+  const query = new URLSearchParams({ client_version: 'cpa' })
   return base + '/models?' + query
 }

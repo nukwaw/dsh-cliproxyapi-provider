@@ -93,12 +93,17 @@ async function startStack({ document, credential, pluginConfig, piAiProviders, c
     }
   }
 
-  // Minimal stand-in for dsh-web's registry seam: just the provider map the
-  // fake-ip resolver fix patches into.
+  // Minimal stand-in for dsh-web's registry seam: the provider maps the fake-ip
+  // resolver fix patches into and the search tier the routing diagnostics read.
   class MemoryWeb extends Service {
     constructor(ctx) {
       super(ctx, 'web')
       this.fetchProviders = new Map()
+      this.searchProviders = new Map([['memory', {
+        id: 'memory',
+        available: () => true,
+        search: async () => ({ sources: [], truncated: false }),
+      }]])
     }
   }
 
@@ -224,7 +229,7 @@ test('streams through the plugin adapter with the placeholder when keyless', asy
 
     const inference = harness.requests.find((request) => !request.url.includes('/models?'))
     assert.equal(inference.authorization, PLACEHOLDER_AUTHORIZATION)
-    // webSearch defaults on and gpt-5.6-sol advertises supports_search_tool.
+    // Web search routes itself: gpt-5.6-sol advertises native search in the catalog.
     assert.deepEqual(inference.body.tools, [{ type: 'web_search' }])
     assert.equal(inference.body.service_tier, undefined)
     assert.equal(chunks.at(-1)?.type, 'finish')
@@ -267,23 +272,38 @@ test('fast mode sends service_tier priority only to catalog-flagged models', asy
   }
 })
 
-test('webSearch false leaves payloads without the builtin tool', async () => {
-  const stack = await startStack()
+test('an upstream-declared unsupported model keeps the local web tools', async () => {
+  // The catalog verdict is authoritative even against the legacy Codex flag:
+  // a model the proxy resolved as unsupported must fall back to DSH's tools.
+  const stack = await startStack({ catalogBody: { models: [
+    { slug: 'gpt-5.6-sol', display_name: 'GPT 5.6 Sol', supports_search_tool: true },
+    { slug: 'gpt-5.5', display_name: 'GPT 5.5', supports_search_tool: true, cpa_capabilities: { web_search: false } },
+  ] } })
   try {
     const { ctx, harness } = stack
-    await ctx.settings.mutate('llm-cliproxyapi', [
-      { op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' },
-      { op: 'set', path: ['webSearch'], value: false },
-    ])
+    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' }])
     await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
-    const chunks = []
-    for await (const chunk of ctx.llm.stream({
-      provider: 'CLIProxyAPI',
-      model: 'gpt-5.6-sol',
-      messages: [createUserMessage({ content: [{ type: 'text', text: 'probe' }], source: { kind: 'user' } })],
-    })) chunks.push(chunk)
-    const inference = harness.requests.find((request) => !request.url.includes('/models?'))
-    assert.equal(inference.body.tools, undefined)
+    const tools = [{
+      name: 'web_search', description: 'Search the web using 1-4 queries.',
+      parameters: { type: 'object', properties: { queries: { type: 'array', items: { type: 'string' } } }, required: ['queries'] },
+    }]
+    const capture = async (model) => {
+      const before = harness.requests.length
+      for await (const _ of ctx.llm.stream({
+        provider: 'CLIProxyAPI', model, tools,
+        messages: [createUserMessage({ content: [{ type: 'text', text: 'probe' }], source: { kind: 'user' } })],
+      })) {}
+      const requests = harness.requests.slice(before)
+      assert.equal(requests.length, 1)
+      return requests[0].body
+    }
+    const unsupported = await capture('gpt-5.5')
+    assert.deepEqual(unsupported.tools.map((tool) => tool.type === 'function' ? tool.name : tool.type), ['web_search'])
+    assert.equal(unsupported.input.length, 1, 'no routing guidance without native search')
+    const native = await capture('gpt-5.6-sol')
+    assert.deepEqual(native.tools.map((tool) => tool.type === 'function' ? tool.name : tool.type), ['web_search'])
+    assert.deepEqual(native.tools[0], { type: 'web_search' })
+    assert.equal(native.input.length, 2, 'routing guidance replaces the local function')
   } finally {
     await stack.dispose()
   }
@@ -294,8 +314,8 @@ test('native browsing replaces local web tools through prepared adapter dispatch
   const stack = await startStack({
     credential: 'sk-test',
     catalogBody: { models: [...CATALOG_BODY.models, {
-      slug: 'search-only', supports_search_tool: true,
-      supported_reasoning_levels: [{ effort: 'none' }],
+      slug: 'search-only', supported_reasoning_levels: [{ effort: 'none' }],
+      cpa_capabilities: { web_search: true },
     }] },
     piAiProviders: {
       openai: {
@@ -369,22 +389,18 @@ test('native browsing replaces local web tools through prepared adapter dispatch
     assert.equal(followUp.input.filter((item) => item.type === 'function_call').length, 2)
     assert.equal(followUp.input.filter((item) => item.type === 'function_call_output').length, 2)
 
-    // A settings change must affect the next prepared call without a refetch.
-    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['webSearch'], value: false }])
-    const disabled = await capture('CLIProxyAPI', model, history)
-    assert.deepEqual(disabled.tools.map((tool) => tool.name), ['web_search', 'web_fetch', 'bash'])
-    assert.deepEqual(followUp.input, [disabled.input[0], followUp.input[1], ...disabled.input.slice(1)], 'only routing guidance may change; history remains intact')
-    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['webSearch'], value: true }])
-    assertNative(await capture('CLIProxyAPI', model, [user]))
-
+    // Routing is a catalog fact, not a preference: a model without the
+    // capability keeps every local tool, and nothing needs re-syncing.
     const unsupported = await capture('CLIProxyAPI', 'kimi-for-coding', [user])
-    assert.deepEqual(unsupported.tools, disabled.tools)
-    assert.equal(unsupported.input.length, 2)
+    assert.deepEqual(unsupported.tools.map((tool) => tool.name), ['web_search', 'web_fetch', 'bash'])
+    assert.equal(unsupported.input.length, 2, 'no routing note is added without native search')
+    assert.equal(unsupported.input[1].content[0].text, user.content[0].text)
+    assertNative(await capture('CLIProxyAPI', model, [user]))
     const searchOnly = await capture('CLIProxyAPI', 'search-only', [user])
     assert.deepEqual(searchOnly.tools.map((tool) => tool.type === 'function' ? tool.name : tool.type), ['web_fetch', 'bash', 'web_search'])
     assert.doesNotMatch(searchOnly.input[1].content, /open_page/)
     const otherProvider = await capture('openai', model, [user])
-    assert.deepEqual(otherProvider.tools, disabled.tools, 'the shared DSH tools and other providers must be unaffected')
+    assert.deepEqual(otherProvider.tools.map((tool) => tool.name), ['web_search', 'web_fetch', 'bash'], 'the shared DSH tools and other providers must be unaffected')
     assert.equal(otherProvider.input.length, 2)
     assert.equal(harness.requests.filter((request) => request.url.includes('/models?')).length, catalogFetches)
     assert.deepEqual(tools, originalTools)
@@ -482,10 +498,7 @@ test('bash optional arguments match builtin OpenAI on initial and tool-result tu
   ]
   try {
     const { ctx, harness } = stack
-    await ctx.settings.mutate('llm-cliproxyapi', [
-      { op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' },
-      { op: 'set', path: ['webSearch'], value: false },
-    ])
+    await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['baseURL'], value: 'http://127.0.0.1:8317/v1' }])
     await waitFor(() => ctx.llm.listProviders().some((provider) => provider.id === 'CLIProxyAPI'))
     const capture = async (provider, messages) => {
       const before = harness.requests.length
@@ -495,11 +508,8 @@ test('bash optional arguments match builtin OpenAI on initial and tool-result tu
       return requests[0].body
     }
     for (const speedMode of ['standard', 'fast']) {
-      for (const webSearch of [false, true]) {
-        await ctx.settings.mutate('llm-cliproxyapi', [
-          { op: 'set', path: ['speedMode'], value: speedMode },
-          { op: 'set', path: ['webSearch'], value: webSearch },
-        ])
+      {
+        await ctx.settings.mutate('llm-cliproxyapi', [{ op: 'set', path: ['speedMode'], value: speedMode }])
         for (const followUp of [false, true]) {
           const builtin = await capture('openai', followUp ? history('openai') : [user])
           const custom = await capture('CLIProxyAPI', followUp ? history('CLIProxyAPI') : [user])
@@ -510,12 +520,12 @@ test('bash optional arguments match builtin OpenAI on initial and tool-result tu
           assert.deepEqual(custom.tools[0].parameters.required, ['command', 'description'])
           const expected = structuredClone(builtin)
           if (speedMode === 'fast') expected.service_tier = 'priority'
-          if (webSearch) expected.tools.push({ type: 'web_search' })
+          expected.tools.push({ type: 'web_search' })
           assert.deepEqual(custom, expected)
         }
       }
     }
-    assert.equal(dispatches.length, 8)
+    assert.equal(dispatches.length, 4)
     assert.ok(dispatches.every((dispatch) => dispatch.reasoningEffort === 'high'))
   } finally {
     await stack.dispose()
